@@ -1,0 +1,16 @@
+[Unit]
+Description=拾光 · 每日数据备份
+Documentation=https://zhuangrongjian.space/shiguang/
+After=local-fs.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/shiguang.env
+ExecStart=/bin/bash /opt/shiguang/server/backup.sh
+Nice=10
+IOSchedulingClass=idle
+
+# 备份只读数据目录，写备份目录
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/backups/shiguang

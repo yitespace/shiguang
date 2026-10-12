@@ -1,0 +1,12 @@
+[Unit]
+Description=拾光 · 每天凌晨备份一次
+
+[Timer]
+# 每天 03:30（服务器本地时间），错开整点的其它任务
+OnCalendar=*-*-* 03:30:00
+# 如果那时机器关着，开机后补跑一次
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

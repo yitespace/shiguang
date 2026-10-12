@@ -1,0 +1,29 @@
+[Unit]
+Description=拾光 ShiGuang · 个人记录 + AI 回忆服务
+Documentation=https://zhuangrongjian.space/shiguang/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/shiguang
+EnvironmentFile=/etc/shiguang.env
+ExecStart=/usr/bin/node /opt/shiguang/server/src/index.mjs
+Restart=always
+RestartSec=3
+
+# 日志走 journald，用 journalctl -u shiguang 查看
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=shiguang
+
+# 只允许写数据目录，其余保持只读
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/shiguang
+
+[Install]
+WantedBy=multi-user.target

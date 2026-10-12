@@ -1,0 +1,47 @@
+{
+  "name": "shiguang",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "拾光 · 随手记录 + AI 对话式回忆",
+  "scripts": {
+    "dev": "vite",
+    "dev:api": "node server/src/index.mjs",
+    "build": "vue-tsc --noEmit && vite build",
+    "build:only": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5190",
+    "typecheck": "vue-tsc --noEmit",
+    "test:api": "SHIGUANG_SMS_DEV=1 node scripts/test-api.mjs",
+    "deploy": "bash scripts/deploy.sh",
+    "build:apk": "bash scripts/build-apk.sh",
+    "icons:android": "node scripts/gen-android-icons.mjs",
+    "verify:voice": "node scripts/verify-voice.mjs",
+    "audit:ui": "node scripts/audit-ui.mjs",
+    "audit:ui:dark": "node scripts/audit-ui.mjs --dark",
+    "audit:ui:desktop": "node scripts/audit-ui.mjs --desktop",
+    "verify:interaction": "node scripts/verify-interaction.mjs",
+    "verify:edge": "node scripts/verify-edge.mjs",
+    "test:all": "export SHIGUANG_SMS_DEV=1 BASE=${BASE:-http://127.0.0.1:8791}; node scripts/test-api.mjs && node scripts/verify-invite.mjs && node scripts/audit-ui.mjs && node scripts/audit-ui.mjs --dark && node scripts/audit-ui.mjs --desktop && node scripts/audit-ui.mjs --desktop --dark && node scripts/verify-auth.mjs && node scripts/verify-profile.mjs && node scripts/verify-find.mjs && node scripts/verify-interaction.mjs && node scripts/verify-features.mjs && node scripts/verify-edge.mjs && node scripts/verify-voice.mjs",
+    "verify:find": "node scripts/verify-find.mjs",
+    "verify:auth": "SHIGUANG_SMS_DEV=1 node scripts/verify-auth.mjs",
+    "verify:features": "node scripts/verify-features.mjs",
+    "shots": "node scripts/shoot-view.mjs",
+    "shots:desktop": "node scripts/shoot-view.mjs --desktop",
+    "shots:dark": "node scripts/shoot-view.mjs --dark",
+    "verify:profile": "node scripts/verify-profile.mjs",
+    "verify:invite": "node scripts/verify-invite.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.7",
+    "vue-tsc": "^2.2.0"
+  }
+}

@@ -1,0 +1,23 @@
+# =============================================================
+# 拾光 · Caddy 站点片段
+# 由 scripts/deploy.sh 注入到 /etc/caddy/Caddyfile 的
+#   # >>> shiguang >>>  ...  # <<< shiguang <<<  之间
+# 手工改这个文件不会生效，请改完重新部署
+# =============================================================
+
+	# ── 拾光（记录 + AI 回忆）──────────────────────────────
+	# /shiguang/api/* → 本机 Node 服务；其余交给静态文件服务
+	handle /shiguang/api/* {
+		uri strip_prefix /shiguang
+		reverse_proxy 127.0.0.1:8787 {
+			flush_interval -1
+		}
+	}
+
+	handle_path /shiguang/* {
+		root * /var/www/shiguang
+		file_server
+	}
+
+	# /shiguang 没有斜杠时补上斜杠，避免相对路径解析错位
+	redir /shiguang /shiguang/ 308

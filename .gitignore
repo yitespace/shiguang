@@ -1,0 +1,65 @@
+# =============================================================
+# 拾光 · 哪些东西不进仓库
+#
+# 原则：只提交「人写的」东西。构建产物、密钥、私人数据、测试残留
+# 一律排除——它们要么能重新生成，要么根本不该被别人看到。
+# =============================================================
+
+# ---------- 依赖与构建产物（能重新生成） ----------
+node_modules/
+dist/
+.pnpm-store/
+*.log
+
+# ---------- 密钥：绝对不能进公开仓库 ----------
+# 安卓签名密钥库。泄露了别人就能签出「看起来是你发的」安装包，
+# 而且一旦换了密钥，已装的用户就没法覆盖升级了。请单独备份。
+.android-build/
+*.keystore
+*.jks
+.env
+.env.local
+
+# ---------- 私人数据 ----------
+# 本地联调灌的示例笔记、录音、会话；线上那份在服务器 /var/lib/shiguang
+server/data/
+
+# ---------- 测试残留 ----------
+.run/
+.audit/
+.shots/
+.shots-edge/
+.shots-interaction/
+.shots-voice/
+screenshots/
+screenshots-live/
+
+# ---------- 安卓构建产物 ----------
+# android/ 本身要提交（那是原生工程），但下面这些是 gradle / cap 生成的
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+
+# ---------- 编辑器 / 系统 ----------
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# ---------- 调试脚本的临时产物 ----------
+.win/
+.tmp_cdp.ps1
+.enc.txt
+.cmd.txt
+
+# ---------- 工具留下的技能缓存 ----------
+# 真正要留在仓库里的是 .dsh/skills/，其余几个是同一批东西的副本
+.agents/
+.claude/
+agent/

@@ -1,0 +1,53 @@
+{
+  "name": "拾光 · 随手记录，AI 帮我回忆",
+  "short_name": "拾光",
+  "description": "随手记录每天发生的事，用对话的方式让 AI 帮你找回任何一天的细节。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#faf7f2",
+  "theme_color": "#6d5efc",
+  "lang": "zh-CN",
+  "categories": ["productivity", "lifestyle"],
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "记一笔",
+      "short_name": "记一笔",
+      "url": "./#/",
+      "description": "快速记录现在发生的事"
+    },
+    {
+      "name": "找回记录",
+      "short_name": "找回",
+      "url": "./#/find",
+      "description": "搜索或让 AI 帮你回忆"
+    }
+  ]
+}
