@@ -49,7 +49,7 @@ const SUGGESTS = [
   '这一周我主要在忙什么？',
   '这个月工作上推进了哪些事？',
   '最近我的心情怎么样？',
-  '我软考复习到哪一步了？',
+  '上次出去玩是什么时候？',
 ];
 
 const activeTags = computed(() => allTags.value.slice(0, 12));
@@ -219,7 +219,7 @@ onMounted(async () => {
         ref="inputRef"
         v-model="q"
         type="search"
-        placeholder="搜「沈警官」「软考」，或直接问「上周三我在忙什么」"
+        placeholder="搜「火锅」，或者问我任何事"
         aria-label="搜索或提问"
         @input="onInput"
         @keydown="onKeydown"

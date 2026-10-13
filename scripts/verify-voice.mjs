@@ -64,7 +64,7 @@ function check(name, cond, extra = '') {
 
 /** 一段真实的口语（有语气词、重复） */
 const SPOKEN =
-  '呃今天那个心情挺差的然后就是综治平台又改需求了嘛我下午改接口改到六点多饭都没顾上吃不过后来小陈帮我带了份饭还挺感动的';
+  '呃今天那个心情挺差的然后就是客户系统又改需求了嘛我下午改接口改到六点多饭都没顾上吃不过后来小李帮我带了份饭还挺感动的';
 
 const CHROME = path.join(os.homedir(), '.cache/ms-playwright/chromium-1217/chrome-linux64/chrome');
 
@@ -310,7 +310,7 @@ async function main() {
     await sleep(4000);
     await shot('05-保存后首页');
 
-    const inTimeline = await ev(`document.querySelector('.day-group')?.innerText.includes('综治平台') || document.body.innerText.includes('综治平台')`);
+    const inTimeline = await ev(`document.querySelector('.day-group')?.innerText.includes('客户系统') || document.body.innerText.includes('客户系统')`);
     check('语音记录出现在时间线', !!inTimeline);
 
     // 6) 用接口塞一段真录音，验证回放组件与 Range
@@ -377,7 +377,7 @@ async function main() {
         const list = await fetch(api + '/entries?limit=2000', { credentials: 'include' }).then(r => r.json());
         let n = 0;
         for (const e of list.data.entries) {
-          if (e.kind === 'voice' || /综治平台|测试回放/.test(e.content)) {
+          if (e.kind === 'voice' || /客户系统|测试回放/.test(e.content)) {
             for (const a of e.attachments || []) {
               await fetch(api + '/audio/' + a.id, { method: 'DELETE', credentials: 'include' }).catch(() => {});
             }

@@ -65,7 +65,7 @@ export function tokenize(text) {
 
 /**
  * 把查询拆成「词组」，用于高亮与短语匹配
- * 例："沈警官 rpa" -> ["沈警官", "rpa"]
+ * 例："老王 rpa" -> ["老王", "rpa"]
  */
 export function queryPhrases(q) {
   return String(q || '')

@@ -189,7 +189,7 @@ async function main() {
       const day = (n) => { const t = new Date(d); t.setDate(t.getDate() - n); return t.getFullYear() + '-' + p(t.getMonth()+1) + '-' + p(t.getDate()); };
       const items = [
         { content: ${JSON.stringify(SEED_MARK)} + ' 上午在改拾光的找回页面，把检索和对话合并了', tags: ['项目'] },
-        { content: ${JSON.stringify(SEED_MARK)} + ' 下午和综治平台对了接口字段', tags: ['工作'] },
+        { content: ${JSON.stringify(SEED_MARK)} + ' 下午和客户系统对了接口字段', tags: ['工作'] },
         { content: ${JSON.stringify(SEED_MARK)} + ' 晚上跑了五公里', tags: ['健康'] },
       ];
       let n = 0;

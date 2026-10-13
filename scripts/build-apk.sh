@@ -58,8 +58,10 @@ if [ ! -f "$KS" ]; then
     -alias "${SHIGUANG_KS_ALIAS:-shiguang}" \
     -keyalg RSA -keysize 2048 -validity 10950 \
     -storepass "$KS_PASS" -keypass "$KS_PASS" \
-    -dname "CN=ShiGuang, OU=Personal, O=Kyne, L=Unknown, ST=Unknown, C=CN" >/dev/null 2>&1
+    -dname "${SHIGUANG_KS_DNAME:-CN=ShiGuang, OU=Personal, O=ShiGuang, C=CN}" >/dev/null 2>&1
   ok "密钥库已生成（口令 $KS_PASS，务必自行备份）"
+  warn "这份密钥库是签名凭证，丢了就没法给已装的 App 覆盖升级，请单独备份"
+  warn "证书里的信息可以用 SHIGUANG_KS_DNAME 覆盖，但换了 DN 就等于换了密钥"
 else
   ok "密钥库已存在，沿用"
 fi

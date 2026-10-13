@@ -98,9 +98,9 @@ const dayAgo = (n) => {
 };
 
 const SEED = [
-  { date: dayAgo(0), createdAt: Date.now() - 3600e3, content: '上午和综治平台沟通接口字段，下午写沈警官的 RPA 代码', tags: ['工作', 'RPA'], mood: 4 },
-  { date: dayAgo(0), createdAt: Date.now() - 1800e3, content: '帮新人小陈调试了场地系统的分页问题，是 SQL 少了个 where 条件', tags: ['工作', '带人'], mood: 5 },
-  { date: dayAgo(1), createdAt: Date.now() - 90000e3, content: '软考中级系统集成工程师，刷了 60 道项目管理真题，正确率 78%', tags: ['软考', '学习'], mood: 3 },
+  { date: dayAgo(0), createdAt: Date.now() - 3600e3, content: '上午和客户系统沟通接口字段，下午写老王的 RPA 代码', tags: ['工作', 'RPA'], mood: 4 },
+  { date: dayAgo(0), createdAt: Date.now() - 1800e3, content: '帮新人小李调试了内部系统的分页问题，是 SQL 少了个 where 条件', tags: ['工作', '带人'], mood: 5 },
+  { date: dayAgo(1), createdAt: Date.now() - 90000e3, content: '备考中级系统集成工程师，刷了 60 道项目管理真题，正确率 78%', tags: ['备考', '学习'], mood: 3 },
   { date: dayAgo(2), createdAt: Date.now() - 180000e3, content: '晚上跑了 5 公里，回来做了番茄牛腩', tags: ['健康', '生活'], mood: 5 },
   { date: dayAgo(9), createdAt: Date.now() - 800000e3, content: '给博客写了个新的部署脚本，rsync + Caddy 热加载，20 秒发完', tags: ['工作', '博客'], mood: 4 },
 ];
@@ -285,7 +285,7 @@ async function main() {
 
     // 用 B 写一条
     cookie = cookieB;
-    await api('/api/entries', { method: 'POST', body: { content: 'B 的记录：在准备软考', tags: ['学习'] } });
+    await api('/api/entries', { method: 'POST', body: { content: 'B 的记录：在准备备考', tags: ['学习'] } });
 
     cookie = firstCookie;
     r = await api('/api/entries');
@@ -297,7 +297,7 @@ async function main() {
     );
     r = await api('/api/stats');
     check('A 的统计也只算自己的', r.data?.total === 2, `实际 ${r.data?.total} / ${JSON.stringify(r).slice(0, 120)}`);
-    r = await api('/api/search?q=' + encodeURIComponent('软考'));
+    r = await api('/api/search?q=' + encodeURIComponent('备考'));
     check('A 搜不到 B 的内容', (r.data?.hits || []).length === 0, JSON.stringify(r.data || {}).slice(0, 140));
 
     cookie = cookieB;
@@ -307,7 +307,7 @@ async function main() {
     check('B 的统计是 1', r.data?.total === 1, `实际 ${r.data?.total}`);
 
     // 昵称也是各改各的
-    await api('/api/auth/profile', { method: 'PUT', body: { nickname: '小王', bio: '在准备软考' } });
+    await api('/api/auth/profile', { method: 'PUT', body: { nickname: '小王', bio: '在准备备考' } });
     cookie = firstCookie;
     r = await api('/api/auth/profile');
     check('B 改昵称影响不到 A', r.data?.nickname === '', JSON.stringify(r.data?.nickname));
@@ -398,11 +398,11 @@ async function main() {
   check('更新记录成功', r.ok && r.data.entry.content.includes('联调完成'));
 
   // ---------- 检索 ----------
-  r = await api('/api/search?q=' + encodeURIComponent('沈警官'));
+  r = await api('/api/search?q=' + encodeURIComponent('老王'));
   check('中文检索命中 RPA 记录', r.data?.count >= 1 && r.data.hits[0].entry.content.includes('RPA'));
 
-  r = await api('/api/search?q=' + encodeURIComponent('软考'));
-  check('标签/正文检索命中软考', r.data?.count >= 1);
+  r = await api('/api/search?q=' + encodeURIComponent('备考'));
+  check('标签/正文检索命中备考', r.data?.count >= 1);
 
   r = await api('/api/search?q=' + encodeURIComponent('SQL'));
   check('英文检索命中', r.data?.count >= 1);
@@ -509,21 +509,21 @@ async function main() {
     check('AI 回答标注了日期', /\d{4}-\d{2}-\d{2}|今天|当天/.test(answer));
     check(
       'AI 回答复述了当天真实细节',
-      /综治|RPA|小陈|场地|SQL|接口/i.test(answer),
+      /综治|RPA|小李|场地|SQL|接口/i.test(answer),
       `实际回答：${answer.slice(0, 80)}`,
     );
-    check('AI 未把无关内容混进来（软考/跑步）', !/番茄牛腩/.test(answer) || /软考/.test(answer), '允许相邻背景');
+    check('AI 未把无关内容混进来（备考/跑步）', !/番茄牛腩/.test(answer) || /备考/.test(answer), '允许相邻背景');
     console.log(`\n  \x1b[90mAI 对「${dayAgo(0)} 我做了什么？」的回答：\x1b[0m\n  ${answer.replace(/\n/g, '\n  ')}\n`);
     if (doneObj?.meta) {
       console.log(`  \x1b[90m命中时间范围：${doneObj.meta.range?.label || '无'} / 参考记录 ${doneObj.meta.usedEntries} 条 / tokens ${doneObj.meta.usage?.total_tokens ?? '-'}\x1b[0m\n`);
     }
 
     // 非流式问答
-    const r2 = await api('/api/ai/ask', { method: 'POST', body: { question: '我软考复习到什么程度了？' } });
+    const r2 = await api('/api/ai/ask', { method: 'POST', body: { question: '我备考复习到什么程度了？' } });
     check('非流式 AI 问答成功', r2.ok && (r2.data?.answer || '').length > 5);
     if (r2.ok) {
-      check('AI 能回答关键词类问题', /软考|真题|78|系统集成/.test(r2.data.answer), `实际：${(r2.data.answer || '').slice(0, 80)}`);
-      console.log(`  \x1b[90mAI 对「我软考复习到什么程度了？」的回答：\x1b[0m\n  ${(r2.data.answer || '').replace(/\n/g, '\n  ')}\n`);
+      check('AI 能回答关键词类问题', /备考|真题|78|系统集成/.test(r2.data.answer), `实际：${(r2.data.answer || '').slice(0, 80)}`);
+      console.log(`  \x1b[90mAI 对「我备考复习到什么程度了？」的回答：\x1b[0m\n  ${(r2.data.answer || '').replace(/\n/g, '\n  ')}\n`);
     }
 
     // 每日总结
@@ -551,7 +551,7 @@ async function main() {
   console.log('\n  \x1b[36m· 语音记录链路\x1b[0m');
 
   // 一段真实的口语转写（有语气词、重复、错别字）
-  const messy = '呃今天就是那个综治平台那边又改需求了然后我下午改了一版接口改到六点多吧反正挺烦的不过晚上吃了顿好的心情还行吧那个小陈他问我的那个分页问题我也给他解决了';
+  const messy = '呃今天就是那个客户系统那边又改需求了然后我下午改了一版接口改到六点多吧反正挺烦的不过晚上吃了顿好的心情还行吧那个小李他问我的那个分页问题我也给他解决了';
   const ex = await api('/api/voice/extract', { method: 'POST', body: { transcript: messy } });
   check('语音提炼接口成功', ex.ok && ex.data?.cleaned);
   if (ex.ok) {
@@ -563,7 +563,7 @@ async function main() {
     check('要点都不超过 24 字', d.points.every((p) => p.length <= 24), JSON.stringify(d.points));
     check('判断出心情（确实有情绪表达）', typeof d.mood === 'number' && d.mood >= 1 && d.mood <= 5, `mood=${d.mood}`);
     check('给出了标签', Array.isArray(d.tags) && d.tags.length >= 1, JSON.stringify(d.tags));
-    check('保留真实信息（综治平台/小陈）', /综治|接口|小陈|分页/.test(d.cleaned + d.points.join('')));
+    check('保留真实信息（客户系统/小李）', /综治|接口|小李|分页/.test(d.cleaned + d.points.join('')));
     check('没有编造没提到的内容', !/请假|离职|加班费|辞职/.test(d.cleaned + d.points.join('')));
   }
 
@@ -807,7 +807,7 @@ async function main() {
   await api('/api/auth/login', { method: 'POST', body: { phone: PHONE, password: PASSWORD } });
   const r5 = await api('/api/entries');
   check('重启后数据仍在（4 条）', r5.data?.entries?.length === 4);
-  check('重启后能搜到老记录', (await api('/api/search?q=' + encodeURIComponent('软考'))).data?.count >= 1);
+  check('重启后能搜到老记录', (await api('/api/search?q=' + encodeURIComponent('备考'))).data?.count >= 1);
   server2.kill('SIGTERM');
   await sleep(500);
 

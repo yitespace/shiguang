@@ -269,7 +269,7 @@ async function del() {
             {{ showMore ? '收起' : '加个标题（可选）' }}
           </button>
           <div v-if="showMore" class="field">
-            <input v-model="title" placeholder="标题，例如「综治平台接口联调」" maxlength="60" />
+            <input v-model="title" placeholder="标题，例如「和朋友吃饭」" maxlength="60" />
           </div>
 
           <!-- 操作 -->

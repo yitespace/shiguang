@@ -252,7 +252,7 @@ async function main() {
     await evaluate(`
       (() => {
         const input = document.querySelector('.ask-box input');
-        input.value = '沈警官';
+        input.value = '老王';
         input.dispatchEvent(new Event('input', { bubbles: true }));
         return true;
       })()
@@ -261,7 +261,7 @@ async function main() {
     await shot('08-检索结果');
 
     const hitCount = await evaluate(`document.querySelectorAll('.results .hit').length`);
-    console.log(`  检索「沈警官」命中 ${hitCount} 条`);
+    console.log(`  检索「老王」命中 ${hitCount} 条`);
 
     // ---- AI 问答实测（点建议问题，等流式回答）----
     // 检索页和对话页已经合并成「拾迹」：同一个输入框，打字是搜，回车/点「问 AI」是问

@@ -38,16 +38,16 @@
   ],
   "shortcuts": [
     {
-      "name": "记一笔",
-      "short_name": "记一笔",
+      "name": "记一记",
+      "short_name": "记一记",
       "url": "./#/",
-      "description": "快速记录现在发生的事"
+      "description": "写一条或说一句，随手记下现在"
     },
     {
-      "name": "找回记录",
-      "short_name": "找回",
+      "name": "拾迹",
+      "short_name": "拾迹",
       "url": "./#/find",
-      "description": "搜索或让 AI 帮你回忆"
+      "description": "搜一下，或者直接问 AI"
     }
   ]
 }
