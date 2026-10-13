@@ -56,6 +56,16 @@ const hiddenDays = computed(() => {
   return Math.max(0, total - 30);
 });
 
+/**
+ * 未来的日子。
+ * 记录只可能发生在过去和现在，未来的格子点了也只会弹「没有记录」，
+ * 所以直接不给点——省得人以为是自己记漏了。
+ * 唯一的例外：那天真有记录（导入的历史数据、或手工补过日期），那就照常可选。
+ */
+function isFuture(date: string): boolean {
+  return date > today();
+}
+
 /** 强度分档：给日历格子按条数上色 */
 function level(date: string): number {
   const n = counts.value[date] || 0;
@@ -82,6 +92,10 @@ async function loadMonth() {
 /** 点日历：选中并把时间线滚到那天 */
 async function pick(date: string) {
   if (!date) return;
+  if (isFuture(date) && !counts.value[date]) {
+    toast(`${shortDate(date)} 还没到呢`);
+    return;
+  }
   selected.value = date;
   if (monthOf(date) !== month.value) month.value = monthOf(date);
   await nextTick();
@@ -95,7 +109,26 @@ async function pick(date: string) {
 }
 
 function shiftMonth(n: number) {
+  if (n > 0 && !canGoNext.value) return;
   month.value = addMonths(month.value, n);
+}
+
+/**
+ * 方向键换月。
+ * 桌面端看日历，← → 是最自然的手势；只在「过往」这一页生效
+ * （组件卸载时摘掉监听），也不抢输入框里的光标移动。
+ */
+function onArrow(e: KeyboardEvent) {
+  const el = e.target as HTMLElement | null;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+  if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    shiftMonth(-1);
+  } else if (e.key === 'ArrowRight' && canGoNext.value) {
+    e.preventDefault();
+    shiftMonth(1);
+  }
 }
 
 function goToday() {
@@ -175,10 +208,12 @@ onMounted(async () => {
     if (el) el.scrollIntoView({ block: 'start' });
   }
   window.addEventListener('scroll', onTimelineScroll, { passive: true });
+  window.addEventListener('keydown', onArrow);
 });
 
 onUnmounted(() => {
   window.removeEventListener('scroll', onTimelineScroll);
+  window.removeEventListener('keydown', onArrow);
   window.clearTimeout(scrollTimer);
 });
 
@@ -208,6 +243,8 @@ watch(
 );
 
 const isCurrentMonth = computed(() => month.value === monthOf(today()));
+/** 能不能往后翻：翻到当月就到头了，再往后整片格子都是灰的，没意义 */
+const canGoNext = computed(() => month.value < monthOf(today()));
 </script>
 
 <template>
@@ -226,7 +263,7 @@ const isCurrentMonth = computed(() => month.value === monthOf(today()));
     <!-- ============ 上：月历 ============ -->
     <section class="cal card">
       <header class="cal-head">
-        <button class="cal-nav" title="上个月" aria-label="上个月" @click="shiftMonth(-1)">
+        <button class="cal-nav" title="上个月（←）" aria-label="上个月" @click="shiftMonth(-1)">
           <Icon name="arrowLeft" :size="17" />
         </button>
         <div class="cal-title">
@@ -235,7 +272,13 @@ const isCurrentMonth = computed(() => month.value === monthOf(today()));
           <small v-else-if="monthTotal">{{ monthTotal }} 条 · {{ activeDays }} 天</small>
           <small v-else>这个月还没有记录</small>
         </div>
-        <button class="cal-nav" title="下个月" aria-label="下个月" @click="shiftMonth(1)">
+        <button
+          class="cal-nav"
+          :disabled="!canGoNext"
+          :title="canGoNext ? '下个月（→）' : '已经是最新的一个月了'"
+          aria-label="下个月"
+          @click="shiftMonth(1)"
+        >
           <Icon name="arrowRight" :size="17" />
         </button>
       </header>
@@ -251,10 +294,11 @@ const isCurrentMonth = computed(() => month.value === monthOf(today()));
           class="cal-day"
           :class="[
             d ? `lv${level(d)}` : 'is-blank',
+            d && isFuture(d) && !counts[d] ? 'is-future' : '',
             d === today() ? 'is-today' : '',
             d === selected ? 'is-selected' : '',
           ]"
-          :disabled="!d"
+          :disabled="!d || (isFuture(d) && !counts[d])"
           :aria-label="d ? `${d}，${counts[d] || 0} 条记录` : undefined"
           @click="pick(d)"
         >
@@ -390,6 +434,20 @@ const isCurrentMonth = computed(() => month.value === monthOf(today()));
   transform: scale(0.92);
 }
 
+.cal-nav:disabled {
+  opacity: var(--disabled-opacity);
+  cursor: default;
+}
+
+.cal-nav:disabled:hover {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.cal-nav:disabled:active {
+  transform: none;
+}
+
 .cal-title {
   text-align: center;
   line-height: 1.25;
@@ -464,6 +522,22 @@ const isCurrentMonth = computed(() => month.value === monthOf(today()));
 .cal-day.is-blank {
   pointer-events: none;
   visibility: hidden;
+}
+
+/*
+ * 还没到的日子：压淡、去掉一切交互反馈。
+ * 不用 display:none 是故意的——日历要保住 7 列的骨架，
+ * 抽掉几格会让整个月看起来是错的。
+ */
+.cal-day.is-future {
+  color: var(--text-3);
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cal-day.is-future:disabled {
+  background: transparent;
+  border-color: transparent;
 }
 
 /* 有记录：按条数上色，底色只做浅层区分 */

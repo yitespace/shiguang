@@ -142,10 +142,12 @@ async function main() {
   r = await api('/api/auth/register', { method: 'POST', body: { phone: '13700137000', password: 'other-pass', inviteCode: code } });
   check('同一个手机号不能注册两次', r.ok === false && /已经注册过/.test(r.error || ''), String(r.error));
 
-  // 注册全程不需要短信验证码
-  check('注册表单里没有验证码这一步', r.error !== undefined);
+  // 注册全程不需要短信验证码：整个流程只用到 phone / inviteCode / password 三个字段
   const needs = await api('/api/auth/methods');
-  check('登录方式里没有把注册和短信绑在一起', needs.data?.invite === true && needs.data?.register === true);
+  check('注册要的是邀请码而不是验证码', needs.data?.invite === true && needs.data?.register === true);
+  // 不带 code 字段也能注册成功（上面那次注册就没带），这里再确认一次接口不认 code
+  r = await api('/api/auth/register', { method: 'POST', body: { phone: '13700137003', password: 'nocode-pass', inviteCode: code } });
+  check('注册不传 code 也能过', r.ok === true && r.data?.authed === true, JSON.stringify(r).slice(0, 120));
 
   // ---------- 浏览器里看一眼 ----------
   if (CHROME) {

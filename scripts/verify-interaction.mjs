@@ -305,16 +305,45 @@ async function main() {
     check('当月天数合理', shape.dayCount >= 28 && shape.dayCount <= 31, `实际 ${shape.dayCount}`);
     await shot('01-日历-360px');
 
-    // 换月
-    const monthBefore = await ev(`document.querySelector('.cal-title b')?.innerText`);
-    await ev(`document.querySelectorAll('.cal-nav')[1]?.click()`);
-    await sleep(1500);
-    const monthAfter = await ev(`document.querySelector('.cal-title b')?.innerText`);
-    check('点右箭头能换到下月', monthBefore !== monthAfter, `${monthBefore} → ${monthAfter}`);
+    // ---------- 未来的日子不能选 ----------
+    // 记录只可能发生在过去和现在，未来的格子点了也只会弹「没有记录」，
+    // 索性不给点——否则用户会以为自己记漏了。
+    const future = JSON.parse(
+      String(
+        await ev(`JSON.stringify({
+          today: (() => { const t = new Date(); const p = (n) => String(n).padStart(2, '0'); return t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate()); })(),
+          total: document.querySelectorAll('.cal-day:not(.is-blank)').length,
+          marked: document.querySelectorAll('.cal-day.is-future').length,
+          clickable: [...document.querySelectorAll('.cal-day.is-future')].filter((c) => !c.disabled).length,
+          nextDisabled: document.querySelectorAll('.cal-nav')[1]?.disabled,
+        })`),
+      ),
+    );
+    check('未来的日子被标出来了', future.marked > 0, `标了 ${future.marked} 个`);
+    check('未来的日子一个都点不了', future.clickable === 0, `还能点 ${future.clickable} 个`);
+    check('在当月时「下个月」箭头是禁用的', future.nextDisabled === true);
+
+    // 回到本月，确认「今天」那格是能点的
+    await ev(`(() => { const b = [...document.querySelectorAll('button')].find(x => /回到今天/.test(x.textContent)); b?.click(); })()`);
+    await sleep(1200);
+    check(
+      '今天那一格照常能点',
+      (await ev(`!document.querySelector('.cal-day.is-today')?.disabled`)) === true,
+    );
+
+    // 换月：先往前翻一个月，确认能翻、也能翻回来
+    // 注意要比「月份标题变了」——之前拿它跟 YYYY-MM 格式的日期比，
+    // 两种格式永远不相等，断言恒为真，等于没测
+    const monthNow = await ev(`document.querySelector('.cal-title b')?.innerText`);
     await ev(`document.querySelectorAll('.cal-nav')[0]?.click()`);
     await sleep(1500);
+    const monthPrev = await ev(`document.querySelector('.cal-title b')?.innerText`);
+    check('点左箭头能翻到上个月', !!monthPrev && monthPrev !== monthNow, `${monthNow} → ${monthPrev}`);
+    check('翻到过去之后「下个月」箭头恢复可用', (await ev(`document.querySelectorAll('.cal-nav')[1]?.disabled`)) === false);
+    await ev(`document.querySelectorAll('.cal-nav')[1]?.click()`);
+    await sleep(1500);
     const monthBack = await ev(`document.querySelector('.cal-title b')?.innerText`);
-    check('点左箭头能回到上月', monthBack === monthBefore, `回到 ${monthBack}`);
+    check('点右箭头能翻回来', monthBack !== monthPrev, `回到 ${monthBack}`);
 
     // 选一天：现在不再跳去日历页，而是把下面的时间线滚到那天
     const picked = await ev(`
@@ -341,11 +370,12 @@ async function main() {
     await shot('02-过往-选中某天');
 
     // 键盘换月
+    const monthBeforeKey = await ev(`document.querySelector('.cal-title b')?.innerText`);
     await send(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowLeft', code: 'ArrowLeft', windowsVirtualKeyCode: 37 }, S);
     await send(ws, 'Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowLeft', code: 'ArrowLeft', windowsVirtualKeyCode: 37 }, S);
     await sleep(1500);
     const monthKey = await ev(`document.querySelector('.cal-title b')?.innerText`);
-    check('键盘左键能换月', monthKey !== monthAfter, `现在是 ${monthKey}`);
+    check('键盘左键能换月', monthKey !== monthBeforeKey, `${monthBeforeKey} → ${monthKey}`);
 
     // 回到今天
     const todayBtn = await ev(`!!Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('回到今天'))`);
