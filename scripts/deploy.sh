@@ -162,9 +162,12 @@ if [ "$WITH_APK" = "1" ]; then
   else
     say "上传安卓包（$(du -h "$APK" | cut -f1)）"
     scp -q -o BatchMode=yes "$APK" "$HOST:$REMOTE_DL/shiguang.apk"
-    VER=$(node -p "require('./package.json').version" 2>/dev/null || echo 1.0.0)
+    # 版本号以 Android 的 versionName 为准：package.json 的 version 一直是 1.0.0，
+    # 拿它命名归档会每个包都叫 1.0.0，分不清是哪一版
+    VER=$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' android/app/build.gradle | head -1)
+    VER=${VER:-$(node -p "require('./package.json').version" 2>/dev/null || echo 0.0.0)}
     $SSH "cp -f '$REMOTE_DL/shiguang.apk' '$REMOTE_DL/shiguang-$VER.apk'"
-    ok "APK 已上传：$REMOTE_DL/shiguang.apk"
+    ok "APK 已上传：$REMOTE_DL/shiguang.apk（归档名 shiguang-$VER.apk）"
   fi
 fi
 
