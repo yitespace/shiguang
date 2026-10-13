@@ -42,7 +42,20 @@ function check(name, cond, extra = '') {
 }
 
 const server = spawn(process.execPath, [path.join(ROOT, 'server', 'src', 'index.mjs')], {
-  env: { ...process.env, PORT: String(PORT), SHIGUANG_DATA: DATA, SHIGUANG_COOKIE_PATH: '/' },
+  env: {
+    ...process.env,
+    PORT: String(PORT),
+    SHIGUANG_DATA: DATA,
+    SHIGUANG_COOKIE_PATH: '/',
+    // 故意关掉短信开发模式：这个套件要验的就是「线上那种没配短信」的形态。
+    // 不显式清掉的话，跑 test:all 时会从外面继承 SHIGUANG_SMS_DEV=1，
+    // 登录页就多出「验证码登录」那一栏，断言全错。
+    SHIGUANG_SMS_DEV: '',
+    ALIYUN_SMS_AK_ID: '',
+    ALIYUN_SMS_AK_SECRET: '',
+    ALIYUN_SMS_SIGN: '',
+    ALIYUN_SMS_TEMPLATE: '',
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let log = '';
@@ -188,6 +201,11 @@ async function main() {
       check('浏览器里能打开登录页', (await ev(`!!document.querySelector('.gate-card')`)) === true);
       const tabsText = String(await ev(`document.querySelector('.gate .tabs')?.innerText || ''`));
       check('登录页有「注册」页签', /注册/.test(tabsText), tabsText.replace(/\n/g, ' / '));
+      // 没配短信时不该出现「验证码登录」——线上就是这个配置
+      check('没配短信就不显示「验证码登录」', !/验证码/.test(tabsText), tabsText.replace(/\n/g, ' / '));
+      const tabCount = Number(await ev(`document.querySelectorAll('.gate .tab').length`));
+      check('没配短信时正好两个页签', tabCount === 2, `实际 ${tabCount} 个`);
+      check('登录页没有多余的验证码输入框', (await ev(`!document.querySelector('.gate .send-code')`)) === true);
     } finally {
       try { ws.close(); } catch { /* ignore */ }
       proc.kill('SIGKILL');

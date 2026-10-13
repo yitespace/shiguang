@@ -280,16 +280,26 @@ async function main() {
     }
     await shot('11-登录页');
 
-    // 短信验证码那一栏
-    await run(
-      `(() => { const t = [...document.querySelectorAll('.tab')].find(x => /短信/.test(x.textContent)); t?.click(); })()`,
-    );
-    await sleep(800);
-    if (DARK) {
-      await run(`document.documentElement.dataset.theme = 'dark'`);
-      await sleep(200);
+    // 登录页的另外两个页签：验证码登录 / 注册
+    // 没配短信时不会出现「验证码登录」，点不到就跳过
+    for (const [re, name] of [
+      ['/验证码/', '12-登录页-验证码'],
+      ['/注册/', '13-登录页-注册'],
+    ]) {
+      const hit = await run(`(() => {
+        const t = [...document.querySelectorAll('.gate .tab')].find(x => ${re}.test(x.textContent));
+        if (!t) return false;
+        t.click();
+        return true;
+      })()`);
+      if (!hit.result?.value) continue;
+      await sleep(700);
+      if (DARK) {
+        await run(`document.documentElement.dataset.theme = 'dark'`);
+        await sleep(200);
+      }
+      await shot(name);
     }
-    await shot('12-登录页-短信');
   } finally {
     try {
       ws.close();

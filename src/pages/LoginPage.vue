@@ -2,13 +2,14 @@
 // =============================================================
 // 登录 / 注册
 //
-// 账号就是手机号。三种进法：
-//   1. 手机号 + 密码        —— 常规登录
-//   2. 手机号 + 短信验证码  —— 快捷登录（配了短信才有这一栏）
-//   3. 注册                 —— 手机号 + 邀请码 + 自己设的密码
+// 账号就是手机号。页面上只留两条路：
+//   登录 —— 手机号 + 密码（配了短信的话多一栏「验证码登录」）
+//   注册 —— 手机号 + 邀请码 + 自己设的密码
 //
-// 注册走邀请码、不走短信；短信只是登录的一种快捷方式，
-// 没配好时第 2 栏自动隐藏，只留 1 和 3。
+// 设计上刻意克制：
+//   · 一个动作只有一个入口。有「注册」页签就不再放「去注册」按钮
+//   · 每种模式只显示自己需要的输入框，绝不并排出现
+//   · 底部最多一句提示，且只在真的需要时出现
 // =============================================================
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import Icon from '../components/Icon.vue';
@@ -18,11 +19,11 @@ import { doLogin, doRegister, reloadSession } from '../lib/store';
 type Mode = 'password' | 'sms' | 'register';
 
 const mode = ref<Mode>('password');
-const inviteCode = ref('');
 
 const phone = ref('');
 const password = ref('');
 const code = ref('');
+const inviteCode = ref('');
 const busy = ref(false);
 const err = ref('');
 const tip = ref('');
@@ -35,26 +36,33 @@ const smsReady = computed(() => !!methods.value?.sms);
 const registerOpen = computed(() => !!methods.value?.register);
 const phoneOk = computed(() => /^1[3-9]\d{9}$/.test(phone.value));
 const canSend = computed(() => phoneOk.value && countdown.value === 0 && !busy.value);
-const canSubmitPassword = computed(() => phoneOk.value && password.value.length > 0);
 
-/** 顶上那排页签：只有真的能用才显示 */
+const canSubmitLogin = computed(() => phoneOk.value && password.value.length > 0);
+const canSubmitSms = computed(() => phoneOk.value && code.value.length >= 4);
+const canSubmitRegister = computed(
+  () => phoneOk.value && inviteCode.value.trim().length >= 4 && password.value.length >= 6,
+);
+
+/** 页签：能用的才出现。没配短信就只有「登录 / 注册」两个 */
 const tabs = computed(() => {
-  const list: { key: Mode; label: string }[] = [{ key: 'password', label: '密码登录' }];
+  const list: { key: Mode; label: string }[] = [{ key: 'password', label: '登录' }];
   if (smsReady.value) list.push({ key: 'sms', label: '验证码登录' });
   if (registerOpen.value) list.push({ key: 'register', label: '注册' });
   return list;
 });
 
-/** 注册要邀请码，不要短信 */
-const canSubmitRegister = computed(
-  () => phoneOk.value && inviteCode.value.trim().length >= 4 && password.value.length >= 6,
-);
+/** 底部提示：只在真的需要说的时候才占一行 */
+const hint = computed(() => {
+  if (mode.value === 'register') return '邀请码找管理员要。每个人的记录互相看不见。';
+  if (mode.value === 'sms') return '没收到？60 秒后可以重发。';
+  return '';
+});
 
 async function loadMethods() {
   try {
     const m = await api.authMethods();
     methods.value = m;
-    // 一个号都没有 → 默认停在注册页，管理员进来第一眼就知道该干嘛
+    // 一个号都还没有 → 默认停在注册，管理员进来第一眼就知道该干嘛
     if (m.register && m.userCount === 0) mode.value = 'register';
     else if (!m.sms) mode.value = 'password';
   } catch {
@@ -79,9 +87,8 @@ async function sendCode() {
   try {
     const res = await api.sendSmsCode(phone.value);
     if (res.devCode) {
-      // 后端没配真短信时会把码回显，方便自测，不让人卡住
       code.value = res.devCode;
-      tip.value = `测试模式：验证码 ${res.devCode}（服务端尚未配置短信通道）`;
+      tip.value = `测试模式：验证码 ${res.devCode}`;
     } else {
       tip.value = '验证码已发送，5 分钟内有效';
     }
@@ -98,47 +105,32 @@ async function sendCode() {
   }
 }
 
-async function submitPassword() {
-  if (busy.value || !canSubmitPassword.value) return;
+async function run(fn: () => Promise<unknown>, fallback: string) {
+  if (busy.value) return;
   busy.value = true;
   err.value = '';
   try {
-    await doLogin(phone.value, password.value);
+    await fn();
   } catch (e: any) {
-    err.value = e?.message || '登录失败';
+    err.value = e?.message || fallback;
     password.value = '';
   } finally {
     busy.value = false;
   }
 }
 
-async function submitSms() {
-  if (busy.value || !phoneOk.value || !code.value) return;
-  busy.value = true;
-  err.value = '';
-  try {
+const submitLogin = () => canSubmitLogin.value && run(() => doLogin(phone.value, password.value), '登录失败');
+
+const submitSms = () =>
+  canSubmitSms.value &&
+  run(async () => {
     await api.smsLogin(phone.value, code.value);
     await reloadSession();
-  } catch (e: any) {
-    err.value = e?.message || '登录失败';
-    code.value = '';
-  } finally {
-    busy.value = false;
-  }
-}
+  }, '登录失败');
 
-async function submitRegister() {
-  if (busy.value || !canSubmitRegister.value) return;
-  busy.value = true;
-  err.value = '';
-  try {
-    await doRegister(phone.value, inviteCode.value.trim(), password.value);
-  } catch (e: any) {
-    err.value = e?.message || '注册失败';
-  } finally {
-    busy.value = false;
-  }
-}
+const submitRegister = () =>
+  canSubmitRegister.value &&
+  run(() => doRegister(phone.value, inviteCode.value.trim(), password.value), '注册失败');
 
 onMounted(loadMethods);
 onUnmounted(() => window.clearInterval(timer));
@@ -148,19 +140,10 @@ onUnmounted(() => window.clearInterval(timer));
   <div class="gate">
     <div class="gate-card">
       <div class="gate-mark"><Icon name="feather" :size="30" /></div>
-      <h1>{{ mode === 'register' ? '注册一个账号' : '拾光' }}</h1>
-      <p class="desc">
-        <template v-if="mode === 'register'">
-          账号就是手机号。<br />
-          填上管理员给你的邀请码就能进来。
-        </template>
-        <template v-else>
-          随手记下每天发生的事，<br />
-          再用对话的方式，把它们找回来。
-        </template>
-      </p>
+      <h1>拾光</h1>
+      <p class="desc">随手记下每天发生的事，<br />再用对话的方式，把它们找回来。</p>
 
-      <!-- 三种进法：能用的才显示 -->
+      <!-- 登录 / 注册。配了短信才会多出「验证码登录」 -->
       <div v-if="tabs.length > 1" class="tabs" role="tablist">
         <button
           v-for="t in tabs"
@@ -175,7 +158,7 @@ onUnmounted(() => window.clearInterval(timer));
         </button>
       </div>
 
-      <!-- 手机号：每种模式都要填 -->
+      <!-- 手机号：三种模式都要 -->
       <div class="field">
         <span class="icon"><Icon name="phone" :size="18" /></span>
         <input
@@ -189,7 +172,7 @@ onUnmounted(() => window.clearInterval(timer));
         />
       </div>
 
-      <!-- 密码登录 -->
+      <!-- ① 密码登录 -->
       <template v-if="mode === 'password'">
         <div class="field">
           <span class="icon"><Icon name="lock" :size="18" /></span>
@@ -199,16 +182,39 @@ onUnmounted(() => window.clearInterval(timer));
             placeholder="密码"
             autocomplete="current-password"
             aria-label="密码"
-            @keydown.enter="submitPassword"
+            @keydown.enter="submitLogin"
           />
         </div>
-        <button class="btn btn-primary btn-block submit" :disabled="busy || !canSubmitPassword" @click="submitPassword">
+        <button class="btn btn-primary btn-block submit" :disabled="busy || !canSubmitLogin" @click="submitLogin">
           {{ busy ? '正在验证…' : '进入' }}
         </button>
       </template>
 
-      <!-- 注册：手机号 + 邀请码 + 密码，不牵扯短信 -->
-      <template v-if="mode === 'register'">
+      <!-- ② 验证码登录（只有配了短信才有这一栏） -->
+      <template v-else-if="mode === 'sms'">
+        <div class="field">
+          <span class="icon"><Icon name="check" :size="18" /></span>
+          <input
+            v-model="code"
+            type="text"
+            inputmode="numeric"
+            maxlength="6"
+            placeholder="6 位验证码"
+            autocomplete="one-time-code"
+            aria-label="验证码"
+            @keydown.enter="submitSms"
+          />
+          <button class="send-code" :disabled="!canSend" @click="sendCode">
+            {{ countdown > 0 ? `${countdown}s` : '获取验证码' }}
+          </button>
+        </div>
+        <button class="btn btn-primary btn-block submit" :disabled="busy || !canSubmitSms" @click="submitSms">
+          {{ busy ? '正在验证…' : '进入' }}
+        </button>
+      </template>
+
+      <!-- ③ 注册 -->
+      <template v-else>
         <div class="field">
           <span class="icon"><Icon name="check" :size="18" /></span>
           <input
@@ -231,66 +237,14 @@ onUnmounted(() => window.clearInterval(timer));
             @keydown.enter="submitRegister"
           />
         </div>
-        <button
-          class="btn btn-primary btn-block submit"
-          :disabled="busy || !canSubmitRegister"
-          @click="submitRegister"
-        >
+        <button class="btn btn-primary btn-block submit" :disabled="busy || !canSubmitRegister" @click="submitRegister">
           {{ busy ? '正在创建…' : '注册并进入' }}
         </button>
       </template>
 
-      <!-- 验证码快捷登录 -->
-      <template v-else>
-        <div class="field">
-          <span class="icon"><Icon name="check" :size="18" /></span>
-          <input
-            v-model="code"
-            type="text"
-            inputmode="numeric"
-            maxlength="6"
-            placeholder="6 位验证码"
-            autocomplete="one-time-code"
-            aria-label="验证码"
-          />
-          <button class="send-code" :disabled="!canSend" @click="sendCode">
-            {{ countdown > 0 ? `${countdown}s` : '获取验证码' }}
-          </button>
-        </div>
-
-        <button
-          class="btn btn-primary btn-block submit"
-          :disabled="busy || !phoneOk || !code"
-          @click="submitSms"
-        >
-          {{ busy ? '正在验证…' : '进入' }}
-        </button>
-      </template>
-
       <p v-if="err" class="err">{{ err }}</p>
-      <p v-if="tip" class="tip">{{ tip }}</p>
-
-      <!-- 短信只是登录的一种快捷方式，没配好不影响注册和登录 -->
-      <p v-if="!smsReady && mode !== 'register'" class="hint">
-        服务端没配置短信通道，所以没有「验证码登录」这一栏。<br />
-        用手机号 + 密码照样进；注册要的是邀请码。
-      </p>
-
-      <button
-        v-if="mode === 'password' && registerOpen"
-        class="btn btn-block alt"
-        @click="switchTo('register')"
-      >
-        还没有账号？注册一个
-      </button>
-      <button v-else-if="mode === 'register'" class="btn btn-block alt" @click="switchTo('password')">
-        已经有账号了，去登录
-      </button>
-
-      <p v-if="mode === 'register'" class="hint muted">
-        邀请码找管理员要。每个账号的记录互相看不见，只有你自己能打开。
-      </p>
-      <p class="hint muted">所有内容都只存在这台服务器上，不会流向别处。</p>
+      <p v-else-if="tip" class="tip">{{ tip }}</p>
+      <p v-else-if="hint" class="hint">{{ hint }}</p>
     </div>
   </div>
 </template>
@@ -313,9 +267,9 @@ onUnmounted(() => window.clearInterval(timer));
 .tab {
   flex: 1;
   min-width: 0;
-  padding: 8px 6px;
+  padding: 9px 6px;
   border-radius: var(--r-full);
-  font-size: 0.84rem;
+  font-size: 0.86rem;
   font-weight: 560;
   color: var(--text-2);
   white-space: nowrap;
@@ -360,35 +314,26 @@ onUnmounted(() => window.clearInterval(timer));
   margin-top: 16px;
 }
 
+/* 报错 / 提示 / 说明共用一行，同时只出现一条，不叠着占地方 */
+.err,
+.tip,
 .hint {
   margin-top: 14px;
   font-size: 0.8rem;
-  color: var(--text-3);
   line-height: 1.7;
 }
 
-.muted {
-  margin-top: 6px;
-  opacity: 0.85;
-}
-
-/* 次级动作：和主按钮一样大，别做成句子里的小链接（点不准） */
-.alt {
-  margin-top: 12px;
-  font-weight: 560;
+.err {
+  color: var(--rose-text);
+  font-size: 0.86rem;
 }
 
 .tip {
-  margin-top: 12px;
-  font-size: 0.8rem;
   color: var(--ai-text);
-  line-height: 1.6;
   word-break: break-all;
 }
 
-.err {
-  margin-top: 12px;
-  font-size: 0.86rem;
-  color: var(--rose-text);
+.hint {
+  color: var(--text-3);
 }
 </style>

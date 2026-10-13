@@ -210,6 +210,14 @@ async function main() {
     console.log('\n  \x1b[36m· 密码登录\x1b[0m');
     check('页面有手机号输入框', (await ev(`!!document.querySelector('.gate input[type=tel]')`)) === true);
     check('页面有密码输入框', (await ev(`!!document.querySelector('.gate input[type=password]')`)) === true);
+    // 之前这里有个 v-if/v-else 配对错误，导致密码登录时也冒出验证码输入框。
+    // 钉一条断言，别再犯。
+    check(
+      '密码登录模式下不该出现验证码输入框',
+      (await ev(`!document.querySelector('.gate .send-code')`)) === true,
+    );
+    check('密码登录模式下输入框只有两个', Number(await ev(`document.querySelectorAll('.gate .field').length`)) === 2,
+      `实际 ${await ev(`document.querySelectorAll('.gate .field').length`)} 个`);
     check('能切换/注册的页签都出来了', Number(await ev(`document.querySelectorAll('.gate .tab').length`)) >= 2);
 
     // 注意：v-model 更新的是 ref，按钮的 :disabled 要等 Vue 渲染完才变。
@@ -426,7 +434,7 @@ async function main() {
     // ---------- 9. 新账号能用密码再登回来 ----------
     console.log('\n  \x1b[36m· 新账号重新登录\x1b[0m');
     await ev(`(() => {
-      const t = [...document.querySelectorAll('.gate .tab')].find(x => /密码登录/.test(x.textContent));
+      const t = [...document.querySelectorAll('.gate .tab')].find(x => /^登录$/.test(x.textContent.trim()));
       t?.click();
     })()`);
     await sleep(700);
