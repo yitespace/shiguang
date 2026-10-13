@@ -105,6 +105,10 @@ async function main() {
       '--no-first-run',
       '--password-store=basic',
       '--use-mock-keyring',
+      // 模拟一个麦克风，否则 headless 里 getUserMedia 直接失败，
+      // 「点一下就开录」这类用例会假失败
+      '--use-fake-ui-for-media-stream',
+      '--use-fake-device-for-media-stream',
       '--force-device-scale-factor=2',
       `--user-data-dir=${path.join(os.tmpdir(), 'sg-edge')}`,
       'about:blank',
@@ -206,6 +210,10 @@ async function main() {
     // 测出来的「失败」其实是旧代码的，排查方向会被带偏。
     await send(ws, 'Runtime.evaluate', { expression: `(async () => { try { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch {} })()`, awaitPromise: true }, S);
     await sleep(400);
+    // 清缓存只解决了下一次导航；当前页面还跑着旧的 index.html 引用的 JS。
+    // 不马上重载的话，测的可能是一个已经不存在的文件（页面全白，全是假失败）。
+    await send(ws, 'Page.navigate', { url: `${BASE}/` }, S);
+    await sleep(3000);
     for (let i = 0; i < 8; i++) {
       if (await ev(`!!document.querySelector('.shell')`)) break;
       await ev(LOGIN_JS);
@@ -240,6 +248,26 @@ async function main() {
       check(`空数据下「${name}」页有内容且不报错`, st.textLen > 10 && !st.hasError, JSON.stringify(st));
     }
     await shot('01-空状态-统计');
+
+    // 空状态里那两个按钮得真能点 —— 一条记录都没有的时候，
+    // 「说一句」是最可能被点的那个（心情差的时候没人想打字）
+    await ev(`location.hash='#/'`);
+    await sleep(1200);
+    const emptyBtns = await ev(`
+      (() => {
+        const names = Array.from(document.querySelectorAll('.empty .empty-actions .btn'))
+          .map(b => b.innerText.trim());
+        const mic = Array.from(document.querySelectorAll('.empty .empty-actions .btn'))
+          .find(b => /说一句/.test(b.innerText));
+        mic?.click();
+        return JSON.stringify(names);
+      })()
+    `);
+    await sleep(2500);
+    check('空状态给出「记一笔」和「说一句」两条路', /记一笔/.test(String(emptyBtns)) && /说一句/.test(String(emptyBtns)), String(emptyBtns));
+    check('空状态点「说一句」直接进录音', await ev(`!!document.querySelector('.voice-sheet .rec-btn.is-stop')`));
+    await ev(`document.querySelector('.voice-sheet .icon-btn[title="关闭"]')?.click()`);
+    await sleep(600);
 
     // ---------- 2. 超长内容 ----------
     console.log('\n  \x1b[36m· 超长 / 超短内容\x1b[0m');

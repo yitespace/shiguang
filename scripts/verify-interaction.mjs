@@ -236,6 +236,10 @@ async function main() {
     // 测出来的「失败」其实是旧代码的，排查方向会被带偏。
     await send(ws, 'Runtime.evaluate', { expression: `(async () => { try { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch {} })()`, awaitPromise: true }, S);
     await sleep(400);
+    // 清缓存只解决了下一次导航；当前页面还跑着旧的 index.html 引用的 JS。
+    // 不马上重载的话，测的可能是一个已经不存在的文件（页面全白，全是假失败）。
+    await send(ws, 'Page.navigate', { url: `${BASE}/` }, S);
+    await sleep(3000);
     for (let i = 0; i < 8; i++) {
       if (await ev(`!!document.querySelector('.shell')`)) break;
       await ev(LOGIN_JS);

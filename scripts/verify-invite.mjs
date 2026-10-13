@@ -198,8 +198,10 @@ async function main() {
       await send(ws, 'Page.navigate', { url: `${BASE}/` }, S);
       await sleep(3500);
       await ev(`(async () => { try { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(x => x.unregister())); const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch {} })()`);
+      // 清缓存只解决了下一次导航，而且页面这时还跑着旧的 index.html 引用的 JS。
+      // 必须重新导航一次，否则测的可能是一个已经不存在的文件（页面全白，全是假失败）。
       await send(ws, 'Page.navigate', { url: `${BASE}/` }, S);
-      await sleep(3000);
+      await sleep(3500);
       check('浏览器里能打开登录页', (await ev(`!!document.querySelector('.gate-card')`)) === true);
       const tabsText = String(await ev(`document.querySelector('.gate .tabs')?.innerText || ''`));
       check('登录页有「注册」页签', /注册/.test(tabsText), tabsText.replace(/\n/g, ' / '));

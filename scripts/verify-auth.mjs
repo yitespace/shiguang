@@ -188,6 +188,10 @@ async function main() {
     await sleep(2500);
     // 注销 SW 之外还要清 Cache Storage，否则页面可能跑的是上一版构建
     await ev(`(async () => { try { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch {} })()`);
+    // 清缓存只解决了下一次导航；当前页面还跑着旧的 index.html 引用的 JS。
+    // 不马上重载的话，登录页可能根本没渲染出来，后面全是假失败。
+    await ev(`setTimeout(() => location.reload(), 0)`);
+    await sleep(3000);
     await ev(`(async () => { await fetch('./api/auth/logout', { method: 'POST' }); })()`);
 
     let methods = await call('./api/auth/methods');

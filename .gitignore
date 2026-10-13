@@ -8,6 +8,7 @@
 # ---------- 依赖与构建产物（能重新生成） ----------
 node_modules/
 dist/
+dist-app/
 .pnpm-store/
 *.log
 

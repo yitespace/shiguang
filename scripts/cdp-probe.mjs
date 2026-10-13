@@ -99,6 +99,9 @@ const BASE = process.env.BASE || 'http://127.0.0.1:8791';
 await send(ws, 'Page.navigate', { url: `${BASE}/` }, S);
 await sleep(2500);
 await send(ws, 'Runtime.evaluate', { expression: `(async () => { try { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch {} })()`, awaitPromise: true }, S);
+// 清完缓存要重新载入，否则页面还在跑上一版构建的 JS
+await send(ws, 'Page.navigate', { url: `${BASE}/` }, S);
+await sleep(2500);
 if (process.env.NO_LOGIN !== '1') for (let i = 0; i < 6; i++) {
   const st = await send(ws, 'Runtime.evaluate', { expression: `!!document.querySelector('.shell')`, returnByValue: true }, S);
   if (st.result?.value) break;

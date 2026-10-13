@@ -190,6 +190,10 @@ async function main() {
     await sleep(2500);
     // 注销 SW 之外还要清 Cache Storage，否则页面可能跑的是上一版构建
     await ev(`(async () => { try { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch {} })()`);
+    // 清缓存只解决了下一次导航；当前页面还跑着旧的 index.html 引用的 JS。
+    // 不马上重载的话，后面每一步都可能是在一个白屏上操作。
+    await ev(`setTimeout(() => location.reload(), 0)`);
+    await sleep(3000);
     for (let i = 0; i < 8; i++) {
       if (await ev(`!!document.querySelector('.shell')`)) break;
       await ev(

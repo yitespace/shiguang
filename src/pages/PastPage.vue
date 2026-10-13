@@ -353,11 +353,14 @@ const canGoNext = computed(() => month.value < monthOf(today()));
         <span class="big">🌱</span>
         <p class="tip">
           还没有任何记录。<br />
-          点下面的「记一记」开始，写一句就算数。
+          在下面写一句，或者点麦克风说一句，都算数。
         </p>
         <div class="empty-actions">
           <button class="btn btn-primary btn-sm" @click="recordHere">
             <Icon name="plus" :size="15" /> 记一笔
+          </button>
+          <button class="btn btn-sm" @click="speakHere">
+            <Icon name="mic" :size="15" /> 说一句
           </button>
           <!--
             已经写过东西却看到这一屏，多半是这台设备上的副本还没拉下来

@@ -71,8 +71,8 @@ say "构建 Web 产物并同步到 Android 工程"
 # App 里的页面跑在 https://localhost，接口必须用绝对地址，
 # 所以打包 App 时把后端地址注入进去（网页版则保持同源相对路径）
 API_BASE="${VITE_API_BASE:-https://zhuangrongjian.space/shiguang}"
-VITE_API_BASE="$API_BASE" pnpm build
-if grep -q "zhuangrongjian.space" dist/assets/*.js 2>/dev/null; then
+VITE_OUT_DIR=dist-app VITE_API_BASE="$API_BASE" pnpm build
+if grep -q "zhuangrongjian.space" dist-app/assets/*.js 2>/dev/null; then
   ok "已注入后端地址 $API_BASE"
 else
   warn "没找到注入的后端地址，App 可能连不上服务器"

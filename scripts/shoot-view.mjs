@@ -208,6 +208,10 @@ async function main() {
     // 光注销 SW 还不够：它 precache 过一份 index.html，留着的话
     // 这里会跑上一版界面，测出来的结果全是假的。缓存也一起清掉。
     await run(`(async () => { try { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch {} })()`);
+    // 清缓存只解决了下一次导航；当前页面还跑着旧的 index.html 引用的 JS。
+    // 不马上重载的话，后面每张截图都可能是白屏。
+    await run(`setTimeout(() => location.reload(), 0)`);
+    await sleep(3000);
     for (let i = 0; i < 8; i++) {
       const st = await run(`!!document.querySelector('.shell')`);
       if (st.result?.value) break;

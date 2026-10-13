@@ -7,7 +7,10 @@ export default defineConfig({
   base: './',
   plugins: [vue()],
   build: {
-    outDir: 'dist',
+    // 网页版出到 dist；打 App 时用 VITE_OUT_DIR 出到 dist-app。
+    // 两者必须分开：App 版会把后端地址写成绝对路径，混用会让本地
+    // 和测试环境的前端跑去连线上接口（登录会莫名其妙 401）。
+    outDir: process.env.VITE_OUT_DIR || 'dist',
     assetsDir: 'assets',
     target: 'es2020',
     cssCodeSplit: false,
