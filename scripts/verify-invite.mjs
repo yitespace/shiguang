@@ -149,6 +149,38 @@ async function main() {
   r = await api('/api/auth/register', { method: 'POST', body: { phone: '13700137003', password: 'nocode-pass', inviteCode: code } });
   check('注册不传 code 也能过', r.ok === true && r.data?.authed === true, JSON.stringify(r).slice(0, 120));
 
+  /*
+   * 新用户第一次进站，页面会同时打好几个接口：/api/memories、/api/stats、
+   * /api/calendar、/api/entries…… 而这时这个人的数据目录还不存在。
+   * 这几个请求会各自去建一遍 Store 并同时写 meta.json，撞在一起就 500，
+   * 用户看到的是「刚注册完进来一片报错」。线上真出过。
+   */
+  const racePhone = '13700137009';
+  const racePw = 'race-pass-1';
+  const reg = await fetch(`${BASE}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: racePhone, password: racePw, inviteCode: code }),
+  });
+  check('并发用例的新账号建出来了', reg.ok, String(reg.status));
+  const cookie = String(reg.headers.get('set-cookie') || '').split(';')[0];
+  const asNew = async (p) => {
+    const res = await fetch(`${BASE}${p}`, { headers: { Cookie: cookie } });
+    return { status: res.status, ok: res.ok, body: await res.text() };
+  };
+  const firstHits = await Promise.all([
+    asNew('/api/stats'),
+    asNew('/api/memories?date=2026-10-13&years=5'),
+    asNew('/api/calendar?month=2026-10'),
+    asNew('/api/entries?limit=2000'),
+    asNew('/api/auth/profile'),
+  ]);
+  check(
+    '新账号首次进站并发打接口不会 500',
+    firstHits.every((x) => x.ok),
+    JSON.stringify(firstHits.map((x) => `${x.status}`)),
+  );
+
   // ---------- 浏览器里看一眼 ----------
   if (CHROME) {
     const proc = spawn(

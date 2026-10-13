@@ -268,8 +268,19 @@ async function main() {
     }
     check('AI 能基于记录回答问题', answer.length > 30, `长度=${answer.length}`);
     check('回答里带日期标注', /\d{2}\/\d{2}|\d{4}-\d{2}-\d{2}/.test(answer));
-    const refs = await ev(`document.querySelectorAll('.cited-item').length`);
-    check('回答带可跳转的依据记录', Number(refs) >= 1, `依据=${refs}`);
+    /*
+     * 依据记录是流结束时才由 done 事件补上的，正文却是一边流一边长。
+     * 只等「字够多了」就去看依据，会稳定地看到 0 —— 那是断言跑早了，
+     * 不是功能坏了（线上验收就是这么误报的）。
+     */
+    let refs = 0;
+    for (let i = 0; i < 30; i++) {
+      refs = Number(await ev(`document.querySelectorAll('.cited-item').length`)) || 0;
+      const stillTyping = await ev(`!!document.querySelector('.typing-caret')`);
+      if (refs > 0 || !stillTyping) break;
+      await sleep(500);
+    }
+    check('回答带可跳转的依据记录', refs >= 1, `依据=${refs}`);
     await shot('06-AI对话');
     console.log(`\n  \x1b[90mAI 回答：\x1b[0m\n  ${answer.replace(/\n/g, '\n  ').slice(0, 400)}\n`);
 

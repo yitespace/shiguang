@@ -106,16 +106,24 @@ function inviteOk(input) {
  * 每个用户一套 Store + AudioStore，按需创建、建好就缓存。
  * 之所以开成独立目录而不是在记录里加 userId：
  * 查询、检索、统计的代码一行都不用改，也就不存在「忘了加 where 就串号」的风险。
+ *
+ * 缓存的是 Promise 而不是建好的对象：新用户第一次进站时几个接口会同时
+ * 打过来，如果只缓存结果，它们会各自建一遍 Store 并同时写 meta.json，
+ * 撞在一起就是 500。
  */
 const contexts = new Map();
-async function ctxFor(user) {
+function ctxFor(user) {
   let c = contexts.get(user.id);
   if (!c) {
-    const dir = users.dirOf(user);
-    const store = await new Store(dir).init();
-    const audio = await new AudioStore(dir).init();
-    store.attachAudio(audio);
-    c = { dir, store, audio };
+    c = (async () => {
+      const dir = users.dirOf(user);
+      const store = await new Store(dir).init();
+      const audio = await new AudioStore(dir).init();
+      store.attachAudio(audio);
+      return { dir, store, audio };
+    })();
+    // 建失败就别把坏 Promise 留在缓存里，否则这个用户永远进不来
+    c.catch(() => contexts.delete(user.id));
     contexts.set(user.id, c);
   }
   return c;

@@ -547,6 +547,34 @@ async function main() {
     console.log('\n  \x1b[33m! 未配置 DEEPSEEK_API_KEY，跳过 AI 测试\x1b[0m');
   }
 
+  // ---------- 存储层：并发原子写 ----------
+  // 线上出过一次：新用户第一次进站，几个接口同时打进来，各自建一遍 Store
+  // 并同时写 meta.json。原子写的临时文件名那时只用 pid，两个并发写撞到
+  // 同一个临时文件，先完成的把它 rename 走了，后一个 rename 直接 ENOENT，
+  // 用户看到的是 500。这里直接把并发写压实，比在接口层碰运气靠谱。
+  console.log('\n  \x1b[36m· 存储层并发写\x1b[0m');
+  {
+    const { Store } = await import(path.join(ROOT, 'server', 'src', 'store.mjs'));
+    const dir = path.join(DATA, 'store-race');
+    const st = await new Store(dir).init();
+    const target = path.join(dir, 'race.txt');
+    const rounds = 40;
+    const out = await Promise.allSettled(
+      Array.from({ length: rounds }, (_, i) => st.writeAtomic(target, `第 ${i} 次写入`)),
+    );
+    const bad = out.filter((x) => x.status === 'rejected');
+    check(
+      `${rounds} 个并发原子写都成功（不撞临时文件）`,
+      bad.length === 0,
+      bad.length ? String(bad[0].reason?.message || bad[0].reason) : '',
+    );
+    const left = (await fs.promises.readdir(dir)).filter((f) => f.includes('.tmp-'));
+    check('并发写之后没留下临时文件', left.length === 0, JSON.stringify(left));
+    const body = await fs.promises.readFile(target, 'utf8');
+    check('并发写之后文件内容是完整的某一次写入', /^第 \d+ 次写入$/.test(body), JSON.stringify(body.slice(0, 60)));
+    await fs.promises.rm(dir, { recursive: true, force: true });
+  }
+
   // ---------- 语音：AI 提炼 ----------
   console.log('\n  \x1b[36m· 语音记录链路\x1b[0m');
 

@@ -11,6 +11,15 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { tokenize, queryPhrases, scoreDoc, snippet } from './text.mjs';
 
+/**
+ * 原子写用的递增序号。
+ * 临时文件名里必须带上它：只用 pid 的话，同一个进程里两个并发写会撞到
+ * 同一个临时文件——先完成的那个把它 rename 走了，后一个的 rename 就
+ * 报 ENOENT。线上新用户第一次登录时 /api/stats 和 /api/memories 同时
+ * 打进来，就是这么 500 的。
+ */
+let writeSeq = 0;
+
 export class Store {
   /** @param {string} root 数据目录 */
   constructor(root) {
@@ -326,9 +335,15 @@ export class Store {
   }
 
   async writeAtomic(file, body) {
-    const tmp = `${file}.tmp-${process.pid}`;
+    const tmp = `${file}.tmp-${process.pid}-${++writeSeq}`;
     await fsp.writeFile(tmp, body, 'utf8');
-    await fsp.rename(tmp, file);
+    try {
+      await fsp.rename(tmp, file);
+    } catch (e) {
+      // rename 失败时把临时文件收掉，别在数据目录里留垃圾
+      await fsp.rm(tmp, { force: true }).catch(() => {});
+      throw e;
+    }
   }
 
   async writeJSON(name, obj) {
