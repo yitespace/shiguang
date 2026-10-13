@@ -29,7 +29,6 @@ const route = useRoute();
 // 弹层
 const recorderOpen = ref(false);
 const voiceOpen = ref(false);
-const pickOpen = ref(false);
 const menuOpen = ref(false);
 const editingId = ref<string | null>(null);
 
@@ -47,18 +46,11 @@ function openRecorder() {
   editingId.value = null;
   recorderOpen.value = true;
   menuOpen.value = false;
-  pickOpen.value = false;
 }
 
+/** 打开语音。弹层自己会开录，这里不用传什么 */
 function openVoice() {
   voiceOpen.value = true;
-  menuOpen.value = false;
-  pickOpen.value = false;
-}
-
-/** 中间大按钮：先问「写」还是「说」 */
-function openPicker() {
-  pickOpen.value = true;
   menuOpen.value = false;
 }
 
@@ -67,8 +59,7 @@ function openEdit(id: string) {
   recorderOpen.value = true;
 }
 
-// 快捷键：N 直接开写，V 直接开说。
-// 键盘用户不用先过一遍「写还是说」的选择层，少一步。
+// 快捷键：N 开写，V 开说（V 是直接开录，跟首页那个麦克风一样）
 function onKey(e: KeyboardEvent) {
   const el = e.target as HTMLElement | null;
   const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
@@ -127,7 +118,7 @@ const isMine = computed(() => route.path.startsWith('/mine') || route.path.start
         </RouterLink>
       </nav>
 
-      <button class="btn btn-primary side-add" @click="openPicker">
+      <button class="btn btn-primary side-add" @click="openRecorder">
         <Icon name="plus" :size="18" />
         记一记
         <kbd>N</kbd>
@@ -171,7 +162,7 @@ const isMine = computed(() => route.path.startsWith('/mine') || route.path.start
         <span class="tab-label">{{ t.label }}</span>
       </RouterLink>
 
-      <button class="fab-main" title="记一记" aria-label="记一记" @click="openPicker">
+      <button class="fab-main" title="记一记（N）" aria-label="记一记" @click="openRecorder">
         <Icon name="plus" :size="26" />
       </button>
 
@@ -180,29 +171,6 @@ const isMine = computed(() => route.path.startsWith('/mine') || route.path.start
         <span class="tab-label">{{ t.label }}</span>
       </RouterLink>
     </nav>
-
-    <!-- ============ 「记一记」方式选择 ============ -->
-    <Transition name="sheet">
-      <div v-if="pickOpen" class="sheet-mask" @click.self="pickOpen = false">
-        <div class="sheet pick-sheet">
-          <div class="sheet-grabber"></div>
-          <h3 class="pick-title">记一记</h3>
-          <div class="pick-grid">
-            <button class="pick-item" @click="openRecorder">
-              <span class="pick-icon text-icon"><Icon name="edit" :size="24" /></span>
-              <b>写一条</b>
-              <em>打字记录此刻</em>
-            </button>
-            <button class="pick-item" @click="openVoice">
-              <span class="pick-icon voice-icon"><Icon name="mic" :size="24" /></span>
-              <b>说一句</b>
-              <em>录音后自动转文字</em>
-            </button>
-          </div>
-          <button class="btn btn-block pick-cancel" @click="pickOpen = false">取消</button>
-        </div>
-      </div>
-    </Transition>
 
     <RecorderSheet v-model:open="recorderOpen" :entry-id="editingId" />
     <VoiceSheet v-model:open="voiceOpen" />
@@ -421,84 +389,5 @@ const isMine = computed(() => route.path.startsWith('/mine') || route.path.start
   .tabbar {
     display: none;
   }
-}
-
-/* ---------- 「记一记」方式选择 ---------- */
-.pick-sheet {
-  max-width: min(520px, 100%);
-  text-align: center;
-}
-
-.pick-title {
-  font-size: 1.06rem;
-  font-weight: 640;
-  margin-bottom: 16px;
-}
-
-.pick-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.pick-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 20px 12px 18px;
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  transition: transform 0.2s var(--spring), border-color var(--dur), box-shadow var(--dur);
-}
-
-.pick-item:hover {
-  border-color: var(--border-2);
-  box-shadow: var(--shadow-sm);
-}
-
-.pick-item:active {
-  transform: scale(0.97);
-}
-
-.pick-icon {
-  width: 54px;
-  height: 54px;
-  border-radius: 18px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  margin-bottom: 4px;
-}
-
-/* 「说一句」用 AI 青，字色随主题（暗色下是深墨字，白字会糊） */
-.pick-icon.voice-icon {
-  color: var(--on-ai);
-}
-
-.text-icon {
-  background: linear-gradient(135deg, var(--brand), var(--brand-deep));
-  box-shadow: var(--shadow-glow);
-}
-
-.voice-icon {
-  background: var(--ai-grad);
-  box-shadow: 0 2px 8px -2px rgba(32, 130, 125, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-}
-
-.pick-item b {
-  font-size: 0.96rem;
-  font-weight: 620;
-}
-
-.pick-item em {
-  font-style: normal;
-  font-size: 0.76rem;
-  color: var(--text-3);
-}
-
-.pick-cancel {
-  margin-top: 14px;
 }
 </style>

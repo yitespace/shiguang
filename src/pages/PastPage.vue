@@ -177,6 +177,15 @@ function recordHere() {
   window.dispatchEvent(new CustomEvent('sg:record'));
 }
 
+/**
+ * 一句话直接开录。
+ * 首页这一排就是「抬手就能记」的地方：打字点输入框，说话点麦克风，
+ * 都不该再经过中间的选择层。
+ */
+function speakHere() {
+  window.dispatchEvent(new CustomEvent('sg:voice'));
+}
+
 /** 空状态里的「从服务器重新拉取」：手动重来一次，别让人以为记录没了 */
 const pulling = ref(false);
 async function pullAgain() {
@@ -321,6 +330,9 @@ const canGoNext = computed(() => month.value < monthOf(today()));
           aria-label="快速记录"
           @keydown.enter.exact.prevent="submitQuick"
         ></textarea>
+        <button class="quick-mic" title="说一句（直接开录）" aria-label="说一句" @click="speakHere">
+          <Icon name="mic" :size="17" />
+        </button>
         <button class="quick-send" :disabled="!quick.trim()" title="记下" aria-label="记下" @click="submitQuick">
           <Icon name="check" :size="16" />
         </button>
@@ -614,6 +626,27 @@ const canGoNext = computed(() => month.value < monthOf(today()));
   max-height: 140px;
   line-height: 1.7;
   padding: 5px 0;
+}
+
+/* 麦克风：跟输入框同一排，点一下直接开始录音 */
+.quick-mic {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: var(--ai-text);
+  background: var(--ai-tint);
+  transition: transform var(--dur), background var(--dur);
+}
+
+.quick-mic:hover {
+  background: var(--surface-3);
+}
+
+.quick-mic:active {
+  transform: scale(0.92);
 }
 
 .quick-send {

@@ -78,11 +78,22 @@ const remainText = computed(() => {
 /** 有内容的转写才值得走 AI */
 const canExtract = computed(() => cleaned.value.trim().length > 0);
 
+/*
+ * 打开就开录。
+ * 语音弹层只有「想说点什么」这一个用途——不管是从首页的麦克风、
+ * V 快捷键，还是记录面板里的「切到语音」进来，意图都已经很明确了，
+ * 再让人点一下那个大圆钮纯属多余。
+ */
 watch(
   () => props.open,
-  (open) => {
-    if (open) reset();
-    else hardStop();
+  async (open) => {
+    if (!open) {
+      hardStop();
+      return;
+    }
+    reset();
+    await nextTick();
+    begin();
   },
 );
 

@@ -207,16 +207,13 @@ async function main() {
     await shot('02-首页');
 
     // 3) 写一条记录（走真实 UI）
-    // 「记一记」现在先弹一个选择层，选「写一条」才进记录面板
+    // 「记一记」一步直达：不再有「写一条 / 说一句」的选择层
     const testContent = `线上验收自检 ${new Date().toLocaleTimeString('zh-CN')}`;
     await ev(`document.querySelector('.tabbar .fab-main')?.click()`);
-    await sleep(900);
-    const pickOk = await ev(`document.querySelectorAll('.pick-item').length`);
-    check('「记一记」弹出两个入口', Number(pickOk) === 2, `实际 ${pickOk} 个`);
-    await ev(`[...document.querySelectorAll('.pick-item')][0]?.click()`);
     await sleep(1000);
+    check('不再弹选择层', (await ev(`!document.querySelector('.pick-sheet')`)) === true);
     const sheetOk = await ev(`!!document.querySelector('.recorder')`);
-    check('选「写一条」能打开记录面板', sheetOk);
+    check('点「记一记」直接打开记录面板', sheetOk);
     await ev(`(() => {
       const ta = document.querySelector('.recorder textarea');
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;

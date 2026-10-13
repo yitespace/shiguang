@@ -212,44 +212,31 @@ async function main() {
     check('底栏有「记一记」大按钮', await ev(`!!document.querySelector('.tabbar .fab-main')`));
     await shot('01-底栏语音入口');
 
-    // 2) 打开语音弹层
-    // 现在录音入口收在「记一记」里：先点大按钮，再选「说一句」
-    await ev(`document.querySelector('.tabbar .fab-main').click()`);
-    await sleep(600);
-    await ev(`[...document.querySelectorAll('.pick-item')][1]?.click()`);
-    await sleep(900);
+    // 2) 首页那个麦克风：点一下弹层打开，而且已经在录了
+    await ev(`location.hash = '#/'`);
+    await sleep(1500);
+    await ev(`document.querySelector('.quick-mic').click()`);
+    await sleep(2500);
     check('语音弹层能打开', await ev(`!!document.querySelector('.voice-sheet')`));
+    check('点一下就开录，不用再点第二下', await ev(`!!document.querySelector('.rec-btn.is-stop')`));
     check('显示录音按钮', await ev(`!!document.querySelector('.rec-btn')`));
     const supportMsg = await ev(`!!document.querySelector('.voice-sheet .banner')`);
     console.log(`  录音可用性提示：${supportMsg ? '显示不支持提示' : '正常（可录音）'}`);
-    await shot('02-语音待机');
+    await shot('02-录音中');
 
-    // 3) 真实开始录音（假麦克风）
-    await ev(`document.querySelector('.rec-btn').click()`);
-    await sleep(2500);
-    const recording = await ev(`!!document.querySelector('.rec-btn.is-stop')`);
-    check('能进入录音状态', recording, '（无头环境若无麦克风会显示提示）');
-    if (recording) {
-      await sleep(1500);
-      const t = await ev(`document.querySelector('.rec-time')?.innerText`);
-      check('录音计时在走', /\d{2}:\d{2}/.test(String(t)), `计时=${t}`);
-      check('波形画布存在', await ev(`!!document.querySelector('canvas.wave')`));
-      await shot('03-录音中');
-      // 结束录音 -> 会走真实的上传+转写
-      await ev(`document.querySelector('.rec-btn.is-stop').click()`);
-      await sleep(9000);
-    }
+    // 3) 计时和波形
+    const t = await ev(`document.querySelector('.rec-time')?.innerText`);
+    check('录音计时在走', /\d{2}:\d{2}/.test(String(t)), `计时=${t}`);
+    check('波形画布存在', await ev(`!!document.querySelector('canvas.wave')`));
+    // 结束录音 -> 会走真实的上传 + 转写
+    await ev(`document.querySelector('.rec-btn.is-stop').click()`);
+    await sleep(9000);
+    check('停录后回到可编辑的预览态', await ev(`!!document.querySelector('.voice-sheet textarea')`));
 
-    // 4) 注入一段真实口语，走真实 AI 提炼（不依赖麦克风）
-    await ev(`
-      (() => {
-        const sheet = document.querySelector('.voice-sheet');
-        if (!sheet) { window.dispatchEvent(new CustomEvent('sg:voice')); return 'opened'; }
-        return 'already';
-      })()
-    `);
-    await sleep(1200);
-    // 直接切到预览态：填入转写文本
+    // 4) 注入一段真实口语，走真实 AI 提炼
+    // 注意：不能靠重新打开弹层来回到预览态——现在一打开就自动开录，
+    // 重开等于又录一遍，弹层会停在录音态，下面的 textarea 根本不存在。
+    // 停录之后弹层本来就停在预览态，直接改那个 textarea 即可。
     const injected = await ev(`
       (() => {
         const ta = document.querySelector('.voice-sheet textarea');

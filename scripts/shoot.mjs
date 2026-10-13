@@ -359,8 +359,6 @@ async function main() {
     await evaluate(`document.documentElement.dataset.theme = 'light'; try { localStorage.setItem('shiguang.theme','light'); } catch(e){} location.hash = '#/'`);
     await sleep(1400);
     await evaluate(`document.querySelector('.tabbar .fab-main').click()`);
-    await sleep(600);
-    await evaluate(`[...document.querySelectorAll('.pick-item')][0]?.click()`);
     await sleep(900);
     const sheetOpen = await evaluate(`!!document.querySelector('.recorder')`);
     console.log(`  记录弹层打开：${sheetOpen}`);

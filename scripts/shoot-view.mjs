@@ -83,22 +83,16 @@ const SCENES = [
     settle: 1000,
   },
   {
-    name: '7-记一记-选择',
+    name: '7-记一记-写一条',
     hash: '#/',
-    action: `document.querySelector('.fab-main')?.click()`,
-    settle: 700,
+    action: `document.querySelector('.tabbar .fab-main')?.click()`,
+    settle: 1200,
   },
   {
-    name: '8-记一记-写一条',
+    name: '8-首页-说一句',
     hash: '#/',
-    action: `document.querySelector('.fab-main')?.click(); setTimeout(() => [...document.querySelectorAll('.pick-item')][0]?.click(), 400)`,
-    settle: 1100,
-  },
-  {
-    name: '9-记一记-说一句',
-    hash: '#/',
-    action: `document.querySelector('.fab-main')?.click(); setTimeout(() => [...document.querySelectorAll('.pick-item')][1]?.click(), 400)`,
-    settle: 1100,
+    action: `document.querySelector('.quick-mic')?.click()`,
+    settle: 2500,
   },
   { name: '10-登录页', hash: '#/', action: `(async () => {
       const api = await import('./assets/' + [...document.querySelectorAll('script[type=module]')].map(s=>s.src.split('/').pop())[0]);
@@ -145,6 +139,9 @@ async function main() {
       '--no-first-run',
       '--disable-crash-reporter',
       '--password-store=basic',
+      // 假麦克风：不然截图会停在「权限被拒绝」那一屏
+      '--use-fake-ui-for-media-stream',
+      '--use-fake-device-for-media-stream',
       '--use-mock-keyring',
       '--force-device-scale-factor=2',
       `--user-data-dir=${path.join(os.tmpdir(), `sg-view-${TAG}`)}`,

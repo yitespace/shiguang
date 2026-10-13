@@ -103,6 +103,10 @@ async function main() {
       '--hide-scrollbars',
       '--no-first-run',
       '--password-store=basic',
+      // 要用假麦克风：没有它 getUserMedia 直接失败，
+      // 「点一下就开录」这条就验不了
+      '--use-fake-ui-for-media-stream',
+      '--use-fake-device-for-media-stream',
       '--use-mock-keyring',
       '--force-device-scale-factor=2',
       `--user-data-dir=${path.join(os.tmpdir(), 'sg-interaction')}`,
@@ -464,18 +468,16 @@ async function main() {
     check('底部导航齐全', cl.tabs >= 4, JSON.stringify(cl));
     check('中间有「记一记」大按钮', cl.hasFab === true);
 
-    // 大按钮点开是个选择层：写一条 / 说一句
+    // 大按钮一步直达记录面板：以前要先弹个「写一条 / 说一句」的选择层，
+    // 多一步纯属添堵，现在直接开写。
     await ev(`document.querySelector('.tabbar .fab-main')?.click()`);
-    await sleep(700);
-    const picks = await ev(
-      `JSON.stringify([...document.querySelectorAll('.pick-item')].map((b) => b.innerText.replace(/\\s+/g, ' ').trim()))`,
-    );
-    const pk = JSON.parse(String(picks));
-    check('「记一记」里有两个入口', pk.length === 2, JSON.stringify(pk));
-    check('两个入口是「写一条」和「说一句」', /写一条/.test(pk[0] || '') && /说一句/.test(pk[1] || ''), JSON.stringify(pk));
-    await shot('05-记一记-选择');
-    await ev(`document.querySelector('.pick-sheet .pick-cancel')?.click()`);
-    await sleep(500);
+    await sleep(900);
+    check('点大按钮不再弹选择层', (await ev(`!document.querySelector('.pick-sheet')`)) === true);
+    check('点大按钮直接进记录面板', (await ev(`!!document.querySelector('.recorder')`)) === true);
+    check('记录面板自动聚焦，可以直接打字', (await ev(`document.activeElement?.tagName`)) === 'TEXTAREA');
+    await shot('05-一步开写');
+    await ev(`document.querySelector('.recorder .icon-btn')?.click()`);
+    await sleep(600);
 
     await sleep(1500);
     const recOpened = await ev(`
@@ -489,11 +491,19 @@ async function main() {
     await ev(`document.querySelector('.recorder .icon-btn')?.click()`);
     await sleep(600);
 
-    await ev(`window.dispatchEvent(new CustomEvent('sg:voice'))`);
-    await sleep(1000);
-    check('语音弹层能打开', await ev(`!!document.querySelector('.voice-sheet')`));
+    // 首页那个麦克风：点一下不仅开弹层，还要已经在录了
+    await ev(`location.hash = '#/'`);
+    await sleep(1500);
+    await ev(`document.querySelector('.quick-mic')?.click()`);
+    await sleep(2500);
+    check('首页麦克风能打开语音弹层', await ev(`!!document.querySelector('.voice-sheet')`));
+    check(
+      '首页麦克风点一下就开录（不用再点第二下）',
+      /正在听你说|录音中/.test(String(await ev(`document.querySelector('.voice-sheet')?.innerText || ''`))),
+      String(await ev(`document.querySelector('.voice-sheet')?.innerText || ''`)).slice(0, 40),
+    );
     await ev(`document.querySelector('.voice-sheet .icon-btn')?.click()`);
-    await sleep(600);
+    await sleep(800);
 
     // ---------- 桌面端找回页（之前输入区溢出过） ----------
     console.log('\n  \x1b[36m· 桌面端布局\x1b[0m');

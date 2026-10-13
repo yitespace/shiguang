@@ -21,7 +21,7 @@
     "audit:ui:desktop": "node scripts/audit-ui.mjs --desktop",
     "verify:interaction": "node scripts/verify-interaction.mjs",
     "verify:edge": "node scripts/verify-edge.mjs",
-    "test:all": "export SHIGUANG_SMS_DEV=1 BASE=${BASE:-http://127.0.0.1:8791}; node scripts/test-api.mjs && node scripts/verify-invite.mjs && node scripts/audit-ui.mjs && node scripts/audit-ui.mjs --dark && node scripts/audit-ui.mjs --desktop && node scripts/audit-ui.mjs --desktop --dark && node scripts/verify-auth.mjs && node scripts/verify-profile.mjs && node scripts/verify-find.mjs && node scripts/verify-interaction.mjs && node scripts/verify-features.mjs && node scripts/verify-edge.mjs && node scripts/verify-voice.mjs",
+    "test:all": "export SHIGUANG_SMS_DEV=1 BASE=${BASE:-http://127.0.0.1:8791}; # AI 用例要有 Key 才跑得起来，本地从凭据文件里取（取不到就跳过那几条）\nif [ -z \"$DEEPSEEK_API_KEY\" ] && [ -r \"$HOME/.dsh/.credentials.yaml\" ]; then export DEEPSEEK_API_KEY=\"$(grep -m1 'DEEPSEEK_API_KEY' \"$HOME/.dsh/.credentials.yaml\" | sed 's/.*: *//')\"; fi; node scripts/test-api.mjs && node scripts/verify-invite.mjs && node scripts/audit-ui.mjs && node scripts/audit-ui.mjs --dark && node scripts/audit-ui.mjs --desktop && node scripts/audit-ui.mjs --desktop --dark && node scripts/verify-auth.mjs && node scripts/verify-profile.mjs && node scripts/verify-find.mjs && node scripts/verify-interaction.mjs && node scripts/verify-features.mjs && node scripts/verify-edge.mjs && node scripts/verify-voice.mjs",
     "verify:find": "node scripts/verify-find.mjs",
     "verify:auth": "SHIGUANG_SMS_DEV=1 node scripts/verify-auth.mjs",
     "verify:features": "node scripts/verify-features.mjs",

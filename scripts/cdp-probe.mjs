@@ -42,6 +42,9 @@ const proc = spawn(
     '--hide-scrollbars',
     '--no-first-run',
     '--password-store=basic',
+    // 模拟一个麦克风，否则 headless 里 getUserMedia 直接失败
+    '--use-fake-ui-for-media-stream',
+    '--use-fake-device-for-media-stream',
     '--use-mock-keyring',
     `--user-data-dir=${path.join(os.tmpdir(), `sg-probe-${PORT}`)}`,
     'about:blank',
