@@ -374,7 +374,7 @@ const canGoNext = computed(() => month.value < monthOf(today()));
       </div>
 
       <section v-for="[date, list] in groups" :key="date" :data-date="date" class="day-group">
-        <header class="day-head">
+        <header class="day-head sticky-bg">
           <span class="day-date">{{ shortDate(date) }}</span>
           <span class="day-wd">周{{ weekdayOf(date) }}</span>
           <span v-if="relativeDay(date)" class="day-rel">{{ relativeDay(date) }}</span>
@@ -687,11 +687,19 @@ const canGoNext = computed(() => month.value < monthOf(today()));
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 2px 9px;
-  position: sticky;
-  top: 52px;
+  padding: 8px 2px 9px;
+  /*
+   * 吸顶位置和背景由 .sticky-bg 给（见 global.css）。
+   * 以前这里自己写了一句 background: linear-gradient(... 72%, transparent)，
+   * 那 28% 是透明的，滚动时下面那条记录会从标题底下透出来，
+   * 看着像标题和卡片叠在一起。
+   *
+   * top 从 52px 改回 0：那 52px 是留给以前那条吸顶大标题的，
+   * 标题早就没了，留着只是在顶上开一条缝，让下面的卡片从缝里露出来。
+   * 留 safe-top 是因为 App 里页面顶到状态栏底下。
+   */
+  top: var(--safe-top);
   z-index: 20;
-  background: linear-gradient(180deg, var(--bg) 72%, transparent);
 }
 
 .day-date {

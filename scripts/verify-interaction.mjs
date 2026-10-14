@@ -186,8 +186,15 @@ async function main() {
 
   const ensureData = async () => {
     const made = await apiCall(`
-      const st = await fetch(api + '/stats', { credentials: 'include' }).then(r => r.json());
-      if (st.data.total >= 3) return 'enough:' + st.data.total;
+      /*
+       * 判断依据必须是「有没有自己那几条」，而不是「总条数够不够」。
+       * 之前写的是 total >= 3 就跳过播种，于是库里只要已经有别人的
+       * 3 条以上记录（手工塞过数据、跑过别的套件），这里就不播种了，
+       * 后面搜 SEED_MARK 自然搜不到，报「命中 0 条」——看着像检索坏了。
+       */
+      const list = await fetch(api + '/entries?limit=2000', { credentials: 'include' }).then(r => r.json());
+      const mine = (list.data?.entries || []).filter((e) => e.content.includes(${JSON.stringify(SEED_MARK)})).length;
+      if (mine >= 3) return 'enough:' + mine;
       const d = new Date();
       const p = (n) => String(n).padStart(2, '0');
       const day = (n) => { const t = new Date(d); t.setDate(t.getDate() - n); return t.getFullYear() + '-' + p(t.getMonth()+1) + '-' + p(t.getDate()); };
@@ -376,6 +383,60 @@ async function main() {
     check('点某天会把时间线滚到那天', sel.dayHeadY !== null && sel.dayHeadY < 260, `那天标题在视口 y=${sel.dayHeadY}`);
     check('时间线里有记录', sel.entries > 0, `${sel.entries} 条`);
     await shot('02-过往-选中某天');
+
+    /*
+     * 吸顶的日期标题必须是**不透明**的。
+     * 用户反馈过：往下滑的时候日期那一栏浮在卡片上面，卡片文字从标题底下
+     * 透出来，像两块内容叠在一起。原因是背景写成了
+     * linear-gradient(180deg, var(--bg) 72%, transparent)——底下那 28% 是透明的。
+     *
+     * 只看 backgroundColor 不够：它可能是 transparent，颜色全靠 backgroundImage
+     * 铺上去。所以两条一起卡：底色不透明，且标题自己身上不能有渐变。
+     * 想淡出只能用 ::after，它贴在标题外面，压不到标题自己。
+     */
+    await ev(`window.scrollTo(0, (document.querySelectorAll('.day-head')[1]?.getBoundingClientRect().top || 0) + window.scrollY + 26)`);
+    await sleep(900);
+    const stickyHead = JSON.parse(
+      String(
+        await ev(`(() => {
+          const h = [...document.querySelectorAll('.day-head')]
+            .find((x) => Math.round(x.getBoundingClientRect().top) <= 2);
+          if (!h) return JSON.stringify({ found: false });
+          const s = getComputedStyle(h);
+          const after = getComputedStyle(h, '::after');
+          return JSON.stringify({
+            found: true,
+            bg: s.backgroundColor,
+            bgImage: s.backgroundImage,
+            headHeight: Math.round(h.getBoundingClientRect().height),
+            // 绝对定位元素的 top 会被解析成像素值，所以拿它跟标题高度比
+            afterTop: Math.round(parseFloat(after.top) || 0),
+            afterHeight: after.height,
+          });
+        })()`),
+      ),
+    );
+    check('滚下去之后日期标题吸在顶部', stickyHead.found === true, JSON.stringify(stickyHead));
+    const headAlpha = (() => {
+      const c = String(stickyHead.bg || '');
+      if (c === 'transparent') return 0;
+      const m = c.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const parts = m[1].split(',').map((x) => parseFloat(x));
+      return parts.length === 4 ? parts[3] : 1;
+    })();
+    check('吸顶标题的底色不透明', headAlpha === 1, `backgroundColor=${stickyHead.bg}`);
+    check(
+      '吸顶标题自己不背渐变（透明那段会漏内容）',
+      stickyHead.bgImage === 'none',
+      `backgroundImage=${String(stickyHead.bgImage).slice(0, 60)}`,
+    );
+    check(
+      '淡出效果挂在 ::after 上，只盖标题外面',
+      Math.abs(stickyHead.afterTop - stickyHead.headHeight) <= 2 && parseFloat(stickyHead.afterHeight) > 0,
+      `标题高 ${stickyHead.headHeight}px，::after 从 ${stickyHead.afterTop}px 起、高 ${stickyHead.afterHeight}`,
+    );
+    await shot('02b-过往-标题吸顶');
 
     // 键盘换月
     const monthBeforeKey = await ev(`document.querySelector('.cal-title b')?.innerText`);

@@ -192,8 +192,15 @@ async function main() {
    */
   const ensureData = async () => {
     const r = await apiCall(`
-      const st = await fetch(api + '/stats', { credentials: 'include' }).then(x => x.json());
-      if (st.data.total >= 3) return 'enough:' + st.data.total;
+      /*
+       * 判断依据必须是「有没有自己那几条」，不是「总条数够不够」。
+       * 只看 total 的话，库里只要已经有 3 条以上别人的记录
+       * （手工灌过数据、跑过别的套件），这里就跳过播种，
+       * 后面搜 SEED_MARK 自然搜不到，报「命中 0 条」——看着像检索坏了。
+       */
+      const list = await fetch(api + '/entries?limit=2000', { credentials: 'include' }).then(x => x.json());
+      const mine = (list.data?.entries || []).filter((e) => e.content.includes(${JSON.stringify(SEED_MARK)})).length;
+      if (mine >= 3) return 'enough:' + mine;
       const d = new Date();
       const pad = (n) => String(n).padStart(2, '0');
       const day = (n) => { const t = new Date(d); t.setDate(t.getDate() - n); return t.getFullYear() + '-' + pad(t.getMonth()+1) + '-' + pad(t.getDate()); };

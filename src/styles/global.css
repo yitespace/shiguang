@@ -308,6 +308,36 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* =============================================================
+   吸顶小标题
+   ============================================================= */
+/*
+ * 吸顶标题（时间线的日期、分组标题这类）统一用这一套。
+ *
+ * 关键是背景必须**不透明**。以前图省事写成
+ *   background: linear-gradient(180deg, var(--bg) 72%, transparent)
+ * 想让内容从底下淡出，结果是滚动时下面那条记录会从那 28% 里透出来，
+ * 标题和卡片文字叠在一起（用户截图反馈过）。
+ *
+ * 想要淡出观感就用下面那条 ::after —— 它贴在标题**外面**，
+ * 只盖住标题下沿 10px，压不到标题自己身上。
+ */
+.sticky-bg {
+  position: sticky;
+  background: var(--bg);
+}
+
+.sticky-bg::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 10px;
+  background: linear-gradient(180deg, var(--bg), transparent);
+  pointer-events: none;
+}
+
+/* =============================================================
    基础组件
    ============================================================= */
 .card {
@@ -490,18 +520,12 @@ mark {
 /* =============================================================
    头部
    ============================================================= */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 0 14px;
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  background: linear-gradient(180deg, var(--bg) 62%, transparent);
-  margin: 0 -2px;
-}
+/*
+ * 这里原来有一个吸顶的 .topbar（背景是从 --bg 渐变到透明的）。
+ * 现在没有任何模板再用它，而且那种「渐变到透明」的吸顶背景本身就有问题：
+ * 内容从底下滑过去时会从透明的那一段透出来，看着像两块内容叠在一起。
+ * 下面的 .topbar 规则一并删掉了，需要吸顶背景就用 .sticky-bg。
+ */
 
 .brand {
   display: flex;
@@ -833,43 +857,12 @@ mark {
 /* =============================================================
    记录条目
    ============================================================= */
-.day-group { margin-bottom: 20px; }
-
-.day-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 4px 9px;
-  position: sticky;
-  top: 54px;
-  z-index: 20;
-  background: linear-gradient(180deg, var(--bg) 70%, transparent);
-}
-
-.day-head .date {
-  font-weight: 660;
-  font-size: 0.94rem;
-  letter-spacing: -0.01em;
-}
-
-.day-head .wd { font-size: 0.76rem; color: var(--text-3); }
-
-.day-head .rel {
-  font-size: 0.72rem;
-  padding: 1px 8px;
-  border-radius: var(--r-full);
-  background: var(--brand-tint);
-  color: var(--brand-deep);
-  font-weight: 620;
-}
-
-:root[data-theme='dark'] .day-head .rel { color: var(--brand-soft); }
-
-.day-head .line {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, var(--border-2), transparent);
-}
+/*
+ * 这里原来还有一套 .day-group / .day-head。
+ * 时间线现在归「过往」页自己管（那套用的是 .day-date / .day-line 等类名），
+ * 这一套没有任何模板在用，留着只会让人以为改一处就够了——
+ * 而且它和 PastPage 里那份犯的是同一个错：吸顶背景用了渐变到透明。
+ */
 
 .entry {
   display: flex;

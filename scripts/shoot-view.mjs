@@ -63,6 +63,20 @@ const CHROME = [
 const SCENES = [
   { name: '1-过往', hash: '#/' },
   { name: '2-过往-下滑', hash: '#/', action: `window.scrollTo(0, 900)`, settle: 700 },
+  {
+    /*
+     * 专门看日期标题吸顶时的样子：滚到一个「卡片正好被标题压住一半」的位置，
+     * 用来确认标题背景是不透明的。之前那版渐变到透明，卡片文字会从标题
+     * 底下透出来，看着像两块内容叠在一起。
+     */
+    name: '2b-过往-标题吸顶压住卡片',
+    hash: '#/',
+    action: `(() => {
+      const two = document.querySelectorAll('.day-head')[1];
+      if (two) window.scrollTo(0, two.getBoundingClientRect().top + window.scrollY + 26);
+    })()`,
+    settle: 900,
+  },
   { name: '3-拾迹', hash: '#/find' },
   { name: '4-统计', hash: '#/stats' },
   { name: '5-我的', hash: '#/mine' },
