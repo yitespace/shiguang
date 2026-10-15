@@ -79,6 +79,11 @@ const SCENES = [
   },
   { name: '3-拾迹', hash: '#/find' },
   { name: '4-统计', hash: '#/stats' },
+  // 关怀三件套
+  { name: '4a-吃药提醒', hash: '#/meds', settle: 1400 },
+  { name: '4b-吃药提醒-添加', hash: '#/meds', action: `document.querySelector('.page-head .icon-btn')?.click()`, settle: 900 },
+  { name: '4c-快捷提醒', hash: '#/reminders', settle: 1400 },
+  { name: '4d-学习模式', hash: '#/focus', settle: 1600 },
   { name: '5-我的', hash: '#/mine' },
   { name: '6-设置', hash: '#/settings' },
   { name: '5b-我的-下半', hash: '#/mine', action: `window.scrollTo(0, 620)`, settle: 800 },
@@ -151,6 +156,13 @@ async function main() {
       '--disable-dev-shm-usage',
       '--hide-scrollbars',
       '--no-first-run',
+      /*
+       * 浏览器界面语言。注意：它管不了 <input type="time"> 的显示格式 ——
+       * 那玩意跟系统的 ICU 语言走，而这个容器里只有 C.utf8，
+       * 所以截图里的时间控件会显示成 "08:00 PM"。真机是中文系统就是 24 小时制，
+       * 别拿截图里的 AM/PM 当成 bug 去改。
+       */
+      '--lang=zh-CN',
       '--disable-crash-reporter',
       '--password-store=basic',
       // 假麦克风：不然截图会停在「权限被拒绝」那一屏

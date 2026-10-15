@@ -8,11 +8,15 @@ import { RouterLink, RouterView, useRoute } from 'vue-router';
 import Icon from './components/Icon.vue';
 import RecorderSheet from './components/RecorderSheet.vue';
 import VoiceSheet from './components/VoiceSheet.vue';
+import ReminderPrompt from './components/ReminderPrompt.vue';
 import LoginPage from './pages/LoginPage.vue';
+import * as careApi from './lib/care';
+import { refreshSchedule } from './lib/native';
 import {
   authed,
   bootstrap,
   online,
+  toast,
   pendingCount,
   ready,
   runToastAction,
@@ -59,6 +63,69 @@ function openEdit(id: string) {
   recorderOpen.value = true;
 }
 
+// ---------- 快捷提醒：写完一条之后问一句 ----------
+/*
+ * 检测放在保存**之后**，而且是 fire-and-forget：
+ * 记录是最高频的操作，绝不能被一次 AI 调用拖慢；识别失败也无所谓。
+ * 用户可以在浮卡上点「以后别问了」永久关掉。
+ */
+const REMIND_OFF_KEY = 'sg.remind.auto';
+const promptOpen = ref(false);
+const promptBusy = ref(false);
+const promptHit = ref<{ title: string; at: string; advance: number; quote: string } | null>(null);
+const promptEntryId = ref('');
+
+async function onSaved(e: Event) {
+  const detail = (e as CustomEvent).detail || {};
+  const content = String(detail.content || '').trim();
+  const id = String(detail.id || '');
+  if (!content || !id) return;
+  if (localStorage.getItem(REMIND_OFF_KEY) === '0') return;
+  // 太短的多半没有时间约定；连一个时间词都没有就别花这次 API 调用
+  if (content.length < 6) return;
+  if (!/\d|点|明天|后天|下周|下午|上午|晚上|中午|早上/.test(content)) return;
+  try {
+    const r = await careApi.detectReminder(content, id);
+    if (!r.found || !r.at || !r.title) return;
+    promptHit.value = { title: r.title, at: r.at, advance: r.advance ?? 10, quote: r.quote || content.slice(0, 60) };
+    promptEntryId.value = id;
+    promptOpen.value = true;
+  } catch {
+    /* 识别失败什么都不做，绝不打扰 */
+  }
+}
+
+async function acceptReminder(advance: number) {
+  const hit = promptHit.value;
+  if (!hit) return;
+  promptBusy.value = true;
+  try {
+    await careApi.saveReminder({
+      title: hit.title,
+      at: hit.at,
+      advance,
+      source: 'note',
+      entryId: promptEntryId.value,
+      quote: hit.quote,
+    });
+    promptOpen.value = false;
+    toast('设好了，到点提醒你');
+    // 排上本地通知，否则「设好了」只是一句话
+    await refreshSchedule(careApi.getSchedule, 7).catch(() => {});
+  } catch {
+    toast('没设上，去「快捷提醒」里手动加一条');
+  } finally {
+    promptBusy.value = false;
+  }
+}
+
+/** 永久关掉自动追问 */
+function turnOffPrompt() {
+  promptOpen.value = false;
+  localStorage.setItem(REMIND_OFF_KEY, '0');
+  toast('好，以后不问了。想开回来去「设置」里找');
+}
+
 // 快捷键：N 开写，V 开说（V 是直接开录，跟首页那个麦克风一样）
 function onKey(e: KeyboardEvent) {
   const el = e.target as HTMLElement | null;
@@ -80,12 +147,14 @@ onMounted(() => {
   window.addEventListener('sg:edit', ((e: CustomEvent) => openEdit(e.detail.id)) as EventListener);
   window.addEventListener('sg:record', openRecorder);
   window.addEventListener('sg:voice', openVoice);
+  window.addEventListener('sg:saved', onSaved);
 });
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey);
   window.removeEventListener('sg:record', openRecorder);
   window.removeEventListener('sg:voice', openVoice);
+  window.removeEventListener('sg:saved', onSaved);
 });
 
 const isMine = computed(() => route.path.startsWith('/mine') || route.path.startsWith('/settings'));
@@ -174,6 +243,22 @@ const isMine = computed(() => route.path.startsWith('/mine') || route.path.start
 
     <RecorderSheet v-model:open="recorderOpen" :entry-id="editingId" />
     <VoiceSheet v-model:open="voiceOpen" />
+
+    <!--
+      写完之后问一句「要不要设提醒」。
+      浮在弹层之上、底栏之上，不占版面，几秒后自己消失也没关系——
+      用户真想设的话会去「快捷提醒」里加。
+    -->
+    <ReminderPrompt
+      :open="promptOpen"
+      :title="promptHit?.title || ''"
+      :at="promptHit?.at || ''"
+      :advance="promptHit?.advance ?? 10"
+      :busy="promptBusy"
+      @accept="acceptReminder"
+      @dismiss="promptOpen = false"
+      @off="turnOffPrompt"
+    />
   </div>
 
   <!-- 提示条（可带撤销按钮） -->

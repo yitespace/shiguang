@@ -102,6 +102,13 @@ async function main() {
       '--disable-dev-shm-usage',
       '--hide-scrollbars',
       '--no-first-run',
+      /*
+       * 浏览器界面语言。注意：它管不了 <input type="time"> 的显示格式 ——
+       * 那玩意跟系统的 ICU 语言走，而这个容器里只有 C.utf8，
+       * 所以截图里的时间控件会显示成 "08:00 PM"。真机是中文系统就是 24 小时制，
+       * 别拿截图里的 AM/PM 当成 bug 去改。
+       */
+      '--lang=zh-CN',
       '--password-store=basic',
       // 要用假麦克风：没有它 getUserMedia 直接失败，
       // 「点一下就开录」这条就验不了
@@ -394,7 +401,48 @@ async function main() {
      * 铺上去。所以两条一起卡：底色不透明，且标题自己身上不能有渐变。
      * 想淡出只能用 ::after，它贴在标题外面，压不到标题自己。
      */
-    await ev(`window.scrollTo(0, (document.querySelectorAll('.day-head')[1]?.getBoundingClientRect().top || 0) + window.scrollY + 26)`);
+    /*
+     * 先把时间线撑长。
+     *
+     * sticky 标题只在「所属分组还有内容在视口里」时才吸得住 ——
+     * 分组本身比屏幕还矮的话，滚到底它会自然被顶走，那是正确行为，
+     * 但用例就测不到「吸顶」这个状态了。之前这条时好时坏就是因为
+     * 种子数据只有 3 条，页面根本滚不动。
+     */
+    await apiCall(`
+      const d = new Date(); const p = (n) => String(n).padStart(2, '0');
+      const today = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+      for (let i = 0; i < 8; i++) {
+        await fetch(api + '/entries', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: '吸顶用例撑高-' + i + ' 这是一条用来把时间线拉长的记录，内容本身没有意义', date: today, tags: ['撑高'] }),
+        });
+      }
+      return 'ok';
+    `);
+    await ev(`location.hash = '#/'`);
+    await sleep(1200);
+    await ev(`location.hash = '#/mine'`);
+    await sleep(800);
+    await ev(`location.hash = '#/'`);
+    await sleep(2000);
+
+    const canScroll = JSON.parse(
+      String(
+        await ev(`(() => {
+          const hs = document.querySelectorAll('.day-head');
+          const h = hs[0];
+          return JSON.stringify({
+            heads: hs.length,
+            scrollable: document.documentElement.scrollHeight - window.innerHeight,
+            target: h ? Math.round(h.getBoundingClientRect().top + window.scrollY + 200) : 0,
+          });
+        })()`),
+      ),
+    );
+    check('时间线够长，能滚到标题吸顶的位置', canScroll.scrollable >= canScroll.target, JSON.stringify(canScroll));
+    await ev(`window.scrollTo(0, ${canScroll.target})`);
     await sleep(900);
     const stickyHead = JSON.parse(
       String(
@@ -437,6 +485,20 @@ async function main() {
       `标题高 ${stickyHead.headHeight}px，::after 从 ${stickyHead.afterTop}px 起、高 ${stickyHead.afterHeight}`,
     );
     await shot('02b-过往-标题吸顶');
+
+    await apiCall(`
+      const list = await fetch(api + '/entries?limit=2000', { credentials: 'include' }).then(r => r.json());
+      let n = 0;
+      for (const e of (list.data?.entries || [])) {
+        if (e.content.includes('吸顶用例撑高-')) {
+          await fetch(api + '/entries/' + e.id, { method: 'DELETE', credentials: 'include' });
+          n++;
+        }
+      }
+      return n;
+    `);
+    await ev(`window.scrollTo(0, 0)`);
+    await sleep(500);
 
     // 键盘换月
     const monthBeforeKey = await ev(`document.querySelector('.cal-title b')?.innerText`);

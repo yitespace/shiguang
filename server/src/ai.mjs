@@ -612,6 +612,239 @@ export async function extractVoice(transcript, opts = {}) {
 }
 
 // ---------------------------------------------------------------
+// 关怀：医嘱解析 / 笔记里的时间约定检测
+// ---------------------------------------------------------------
+
+/** 模型偶尔会把 JSON 包在 ```json 里，或者前后带解释，兜一下 */
+function parseJSONLoose(text) {
+  const raw = String(text || '').trim();
+  try {
+    return JSON.parse(raw);
+  } catch {
+    /* 继续兜 */
+  }
+  const m = /\{[\s\S]*\}/.exec(raw);
+  if (m) {
+    try {
+      return JSON.parse(m[0]);
+    } catch {
+      /* 放弃 */
+    }
+  }
+  return {};
+}
+
+/**
+ * 允许的图片类型与体积。
+ * DeepSeek 支持 JPEG/PNG/GIF/WebP，格式按内容判断不按文件名；
+ * base64 单张上限 32MB、整个请求 48MB —— 医嘱照片通常一两 MB，
+ * 这里再收紧一点，免得一张 20MB 的原图把请求顶爆。
+ */
+export const MED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+export const MED_IMAGE_MAX_BYTES = 6 * 1024 * 1024;
+export const MED_IMAGE_MAX_COUNT = 4;
+
+const MED_SYS = `你是「拾光」的用药信息录入助手。用户会给你医生的处方单、药盒照片、出院小结，或者他自己口述/打字的用药说明。你要把里面的**服药安排**整理成结构化数据。
+
+最重要的一条：**这是一份会用来提醒吃药的清单，抄错比抄不全危险得多。**
+
+铁律：
+1. 只写材料上确实有的信息。看不清、没写、拿不准的，一律留空并在 unclear 里说明，**绝不推测**。
+2. 不要给任何医疗建议，不要评价药物，不要补充说明书上的内容，不要提醒副作用。
+3. 剂量照抄原文（「1 片」「半片」「50mg」「一次两粒」都行），不要换算单位。
+4. 时间要转成 24 小时的 HH:MM。原文说「早饭后」→ 08:00、「中午」→ 12:00、「晚上睡前」→ 22:00、「bid」→ 08:00 和 20:00、「tid」→ 08:00、14:00、20:00、「qd」→ 08:00。这样转是常规做法，但要在 note 里保留原话（例如 note 写「早饭后服用」）。
+5. **同一种药只返回一条**，一天吃几次就给它几个 slots。早晚剂量不一样时，
+   把剂量写在各自的 slot 里（slot 有自己的 dose 字段），不要拆成两条 ——
+   「舍曲林早上一片、晚上半片」是一张卡片上的两个时间点，不是两种药。
+   med.dose 只在整个药只有一个剂量时才填。
+6. 剂量或频次看不清时，slots 也要给（宁可提醒了没吃，也别漏提醒），但在 unclear 里明确说哪一条没看清。
+7. **「必要时服用」「需要时吃」「按需」「prn」「sos」这类要单独标出来**：把 prn 设成 true。
+   这类药照样给 slots（写清楚通常什么时候吃），但它不会变成定时提醒 ——
+   到点催一个「按需吃」的药是危险的，尤其是阿普唑仑、劳拉西泮这类
+   苯二氮䓬，天天催着吃会吃出依赖。判错了后果比漏一提醒重得多。
+
+只输出 JSON，不要加任何解释文字。格式：
+{"meds":[{"name":"药名","dose":"","prn":false,"slots":[{"at":"08:00","label":"早","dose":"1 片"},{"at":"22:00","label":"睡前","dose":"半片"}],"note":"早饭后服用","days":[],"startDate":"","endDate":""}],"unclear":["第 3 条剂量看不清"],"summary":"一共 2 种药，每天 3 次"}
+
+说明：
+- slots[].dose：这个时间点吃多少；整盒药只有一个剂量时留空字符串，写在上面的 med.dose
+- prn：true 表示「必要时服用」，不排定时提醒；拿不准时填 false，并在 note 里保留原话
+- days：需要限定星期几时给 [0,1,2,3,4,5,6]（0=周日）的子集；每天吃就给 []
+- startDate/endDate：材料上写了疗程起止才填，格式 YYYY-MM-DD，没写就空字符串
+- label：时段中文简称，如 早/中/晚/睡前，没有就空字符串
+- 材料里没有任何服药信息时返回 {"meds":[],"unclear":[],"summary":""}`;
+
+/**
+ * 解析用药方案。
+ * 输入可以是纯文字（打字或语音转写），也可以带医嘱图片。
+ * 注意：**结果只是草稿**，必须让用户确认后再落库——医疗场景不能让模型直接写库。
+ *
+ * @param {{text?:string, images?:Array<{mime:string,data:string}>, todayStr?:string}} opts
+ */
+export async function parseMedication(opts = {}) {
+  const text = String(opts.text || '').trim().slice(0, 4000);
+  const images = (Array.isArray(opts.images) ? opts.images : [])
+    .filter((im) => im && MED_IMAGE_TYPES.includes(String(im.mime)) && typeof im.data === 'string' && im.data.length > 32)
+    .slice(0, MED_IMAGE_MAX_COUNT)
+    .filter((im) => Math.floor((im.data.length * 3) / 4) <= MED_IMAGE_MAX_BYTES);
+
+  if (!text && !images.length) return { meds: [], unclear: [], summary: '', model: 'passthrough' };
+
+  const today = anchorDate(opts.todayStr);
+  const lines = [
+    `用户所在时区的今天是 ${toDateStr(today)}（星期${WEEK_CN[today.getDay()]}）。`,
+    '',
+  ];
+  if (text) lines.push('用户提供的文字说明：', text, '');
+  if (images.length) lines.push(`另有 ${images.length} 张医嘱/药盒图片，请看图。`);
+
+  const content = [{ type: 'text', text: lines.join('\n') }];
+  for (const im of images) {
+    content.push({ type: 'image_url', image_url: { url: `data:${im.mime};base64,${im.data}`, detail: 'high' } });
+  }
+
+  const json = await chat({
+    messages: [
+      { role: 'system', content: MED_SYS },
+      { role: 'user', content },
+    ],
+    temperature: 0.1,
+    maxTokens: 2000,
+    json: true,
+  });
+
+  const parsed = parseJSONLoose(json.choices?.[0]?.message?.content || '{}');
+  const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  const meds = (Array.isArray(parsed.meds) ? parsed.meds : [])
+    .slice(0, 20)
+    .map((m) => {
+      if (!m || typeof m !== 'object') return null;
+      const name = String(m.name || '').trim().slice(0, 40);
+      if (!name) return null;
+      const slots = [];
+      const seen = new Set();
+      for (const s of Array.isArray(m.slots) ? m.slots.slice(0, 12) : []) {
+        const at = typeof s === 'string' ? s : s && s.at;
+        if (!HHMM.test(String(at || '')) || seen.has(at)) continue;
+        seen.add(at);
+        const slot = { at };
+        if (typeof s === 'object' && s) {
+          const label = String(s.label || '').trim().slice(0, 8);
+          const dose = String(s.dose || '').trim().slice(0, 40);
+          if (label) slot.label = label;
+          if (dose) slot.dose = dose;
+        }
+        slots.push(slot);
+      }
+      if (!slots.length) return null;
+      slots.sort((a, b) => a.at.localeCompare(b.at));
+      const days = Array.isArray(m.days)
+        ? [...new Set(m.days.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort((a, b) => a - b)
+        : [];
+      const ymd = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+      return {
+        name,
+        dose: String(m.dose || '').trim().slice(0, 40),
+        prn: m.prn === true,
+        slots,
+        note: String(m.note || '').trim().slice(0, 200),
+        days: days.length >= 7 ? [] : days,
+        startDate: ymd(m.startDate),
+        endDate: ymd(m.endDate),
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    meds,
+    unclear: (Array.isArray(parsed.unclear) ? parsed.unclear : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 8),
+    summary: String(parsed.summary || '').trim().slice(0, 120),
+    model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+  };
+}
+
+const REMIND_SYS = `你是「拾光」的提醒识别助手。用户刚写下一条记录，你要判断里面有没有「将来某个时间点要做的一件事」，如果有，替他起草一条提醒。
+
+判定的门槛要高——**宁可漏，不要误报**。用户只是随手记点东西，弹一堆「要不要设提醒」只会让人烦。
+
+返回 found=true 需要同时满足：
+1. 有明显的时间点（几点、中午、明天下午三点、下周一……），而且要能落到**具体某天某时刻**；
+2. 有件**将来要做的**事（开会、复诊、交材料、打电话、取快递、面试……）。
+
+以下一律 found=false：
+- 时间已经过去了（「昨天十点开了个会」「早上吃了药」）
+- 只是描述状态或心情（「今天好累」「晚上睡不着」）
+- 只有时间没有事（「下午三点了」），或者只有事没有时间（「记得交材料」）
+- 习惯性的、没有具体某天的事（「以后早点睡」）
+- 拿不准的一律 false
+
+advance 给「提前多少分钟提醒」的建议：开会/约见 10，面试/复诊/看医生 30，考试/出发赶车 60，吃药 0，其它默认 10。
+
+只输出 JSON，不要加任何解释文字。格式：
+{"found":true,"title":"开会","at":"2026-10-14T22:00","advance":10,"quote":"晚上十点有个会"}
+found=false 时给 {"found":false}`;
+
+/**
+ * 从一条记录里找「到点要做的事」。
+ *
+ * 刻意不接进保存流程：记录是最高频的操作，不能被一次 AI 调用拖慢。
+ * 客户端保存完之后再单独打这个接口，识别失败也无所谓。
+ *
+ * @param {{text:string, todayStr?:string, nowTs?:number}} opts
+ */
+export async function detectReminder(opts = {}) {
+  const text = String(opts.text || '').trim();
+  // 太短的一律没戏，省一次调用
+  if (text.length < 5) return { found: false, model: 'passthrough' };
+
+  const now = Number.isFinite(opts.nowTs) ? new Date(opts.nowTs) : new Date();
+  const today = anchorDate(opts.todayStr);
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const user = [
+    `现在的本地时间是 ${toDateStr(today)} ${hhmm}（星期${WEEK_CN[today.getDay()]}）。`,
+    `「今天」「今晚」指 ${toDateStr(today)}；「明天」指 ${toDateStr(new Date(today.getTime() + 86400000))}。`,
+    '只判断这条记录本身，不要参考任何其它信息。',
+    '',
+    '记录内容：',
+    text.slice(0, 1000),
+  ].join('\n');
+
+  const json = await chat({
+    messages: [
+      { role: 'system', content: REMIND_SYS },
+      { role: 'user', content: user },
+    ],
+    temperature: 0.1,
+    maxTokens: 400,
+    json: true,
+  });
+
+  const parsed = parseJSONLoose(json.choices?.[0]?.message?.content || '{}');
+  if (parsed.found !== true) return { found: false, model: process.env.DEEPSEEK_MODEL || 'deepseek-flash' };
+
+  const at = String(parsed.at || '').trim().replace(' ', 'T').slice(0, 16);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(at)) return { found: false, model: process.env.DEEPSEEK_MODEL || 'deepseek-flash' };
+  const title = String(parsed.title || '').trim().slice(0, 40);
+  if (!title) return { found: false, model: process.env.DEEPSEEK_MODEL || 'deepseek-flash' };
+
+  // 模型偶尔会给出已经过去的时间，这种直接丢掉
+  const atTs = new Date(Number(at.slice(0, 4)), Number(at.slice(5, 7)) - 1, Number(at.slice(8, 10)), Number(at.slice(11, 13)), Number(at.slice(14, 16)), 0, 0).getTime();
+  if (!(atTs > now.getTime())) return { found: false, model: process.env.DEEPSEEK_MODEL || 'deepseek-flash' };
+
+  const advRaw = Number(parsed.advance);
+  const advance = Number.isFinite(advRaw) ? Math.max(0, Math.min(24 * 60, Math.round(advRaw))) : 10;
+
+  return {
+    found: true,
+    title,
+    at,
+    advance,
+    quote: String(parsed.quote || '').trim().slice(0, 120),
+    model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+  };
+}
+
+// ---------------------------------------------------------------
 // 那年今日：翻出同一天在往年写下的东西
 // ---------------------------------------------------------------
 

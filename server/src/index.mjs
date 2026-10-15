@@ -12,6 +12,24 @@ import { Store, toDateStr } from './store.mjs';
 import { Users, isPhone, maskPhone, checkPassword } from './users.mjs';
 import { sendSms, smsEnabled, smsConfig, makeCode, issueCode, verifyCode, canSend } from './sms.mjs';
 import { AudioStore, MAX_AUDIO_BYTES } from './audio.mjs';
+import { Care, IMAGE_MAX_BYTES } from './care.mjs';
+import {
+  todayPlan,
+  pendingCount,
+  overdueCount,
+  nextDoseAt,
+  upcomingReminders,
+  activeBlock,
+  blockedPackages,
+  nextBlockStart,
+  blockRemainingMin,
+  buildSchedule,
+  buildFocusIntervals,
+  parseLocalISO,
+  toLocalISO,
+  dateStr,
+  humanMinutes,
+} from './care-logic.mjs';
 import { decodeAudio, sendAudio } from './audio-http.mjs';
 import { transcribe, asrInfo, asrEnabled, classifyAsrError } from './asr.mjs';
 import { hashPassword, makeToken, sessionOf, sessionCookie, clearCookie } from './auth.mjs';
@@ -25,6 +43,8 @@ import {
   extractVoice,
   memoriesOf,
   reflectMemories,
+  parseMedication,
+  detectReminder,
   aiEnabled,
   WEEK_CN,
 } from './ai.mjs';
@@ -120,7 +140,8 @@ function ctxFor(user) {
       const store = await new Store(dir).init();
       const audio = await new AudioStore(dir).init();
       store.attachAudio(audio);
-      return { dir, store, audio };
+      const care = await new Care(dir).init();
+      return { dir, store, audio, care };
     })();
     // 建失败就别把坏 Promise 留在缓存里，否则这个用户永远进不来
     c.catch(() => contexts.delete(user.id));
@@ -498,7 +519,7 @@ const server = http.createServer(async (req, res) => {
     const me = whoami(req);
     if (!me) return fail(req, res, 401, '请先登录');
     // 这个人的数据。下面一律用这两个局部变量，天然只碰自己的目录。
-    const { store, audio } = await ctxFor(me);
+    const { store, audio, care } = await ctxFor(me);
 
     // ---------- 账号信息 ----------
     if (p === '/api/auth/profile' && method === 'GET') {
@@ -768,6 +789,223 @@ const server = http.createServer(async (req, res) => {
       const map = {};
       for (const e of list) map[e.date] = (map[e.date] || 0) + 1;
       return ok(req, res, { month, counts: map });
+    }
+
+    // ================= 关怀：吃药 / 提醒 / 学习模式 =================
+    // 三块功能的数据都归 care 管，和记录完全分开存。
+
+    /** 把「这一天的药 + 这一天的提醒 + 现在该不该专注」打包给首页浮卡用 */
+    if (p === '/api/care/today' && method === 'GET') {
+      const now = Date.now();
+      const today = q.get('today') || dateStr(new Date(now));
+      const meds = care.listMeds();
+      const doses = care.doseLog();
+      const plan = todayPlan(meds, doses, today, now);
+      const focus = care.getFocus();
+      const blocking = blockedPackages(focus.blocks, now, focus.alwaysAllow);
+      const next = nextDoseAt(meds, doses, now);
+      const ups = upcomingReminders(care.listReminders(), now);
+      return ok(req, res, {
+        date: today,
+        meds: { plan, pending: pendingCount(plan), overdue: overdueCount(plan), next: next ? { at: next.at, date: next.date, slot: next.slot, name: next.med.name, dose: next.med.dose } : null },
+        reminders: ups.slice(0, 5).map((r) => ({ id: r.id, title: r.title, at: r.at, fireAt: r.fireAt, advance: r.advance })),
+        focus: {
+          blocking: !!blocking.block,
+          label: blocking.block?.label || '',
+          packages: blocking.packages.length,
+          remaining: blocking.block ? blockRemainingMin(blocking.block, now) : 0,
+          next: (() => {
+            const n = nextBlockStart(focus.blocks, now);
+            return n ? { at: n.at, label: n.block.label } : null;
+          })(),
+        },
+      });
+    }
+
+    // ---------- 吃药 ----------
+    if (p === '/api/care/meds' && method === 'GET') {
+      const meds = care.listMeds();
+      return ok(req, res, { meds, today: todayPlan(meds, care.doseLog(), dateStr(new Date())) });
+    }
+
+    if (p === '/api/care/meds' && method === 'POST') {
+      const body = await readBody(req);
+      const r = await care.saveMed(body);
+      if (!r.ok) return fail(req, res, 400, r.error);
+      return ok(req, res, { med: r.med, today: todayPlan(care.listMeds(), care.doseLog(), dateStr(new Date())) });
+    }
+
+    if (p.startsWith('/api/care/meds/') && method === 'DELETE') {
+      const id = decodeURIComponent(p.slice('/api/care/meds/'.length));
+      const r = await care.removeMed(id);
+      if (!r.ok) return fail(req, res, 404, r.error);
+      return ok(req, res, { removed: id });
+    }
+
+    /**
+     * 打卡。
+     * 路由写成 /api/care/meds/<id>/dose，id 里不会出现斜杠（是随机十六进制）。
+     */
+    if (p.startsWith('/api/care/meds/') && p.endsWith('/dose') && method === 'POST') {
+      const id = decodeURIComponent(p.slice('/api/care/meds/'.length, -'/dose'.length));
+      const body = await readBody(req);
+      const r = await care.logDose({ medId: id, at: body.at, ds: body.date, action: body.action, source: body.source });
+      if (!r.ok) return fail(req, res, 400, r.error);
+      const today = body.date || dateStr(new Date());
+      return ok(req, res, { record: r.record, today: todayPlan(care.listMeds(), care.doseLog(), today) });
+    }
+
+    /**
+     * 解析医嘱（文字 / 语音转写 / 图片）。
+     *
+     * 刻意不落库：这是要用来提醒吃药的清单，抄错了就是吃错药。
+     * 一律返回草稿，由用户点过「就用这个」之后才走 POST /api/care/meds。
+     */
+    if (p === '/api/care/meds/parse' && method === 'POST') {
+      if (!aiEnabled()) return fail(req, res, 503, '服务端未配置 DEEPSEEK_API_KEY');
+      const body = await readBody(req, 40 * 1024 * 1024);
+      const images = (Array.isArray(body.images) ? body.images : [])
+        .slice(0, 4)
+        .map((im) => ({ mime: String(im?.mime || ''), data: String(im?.data || '') }))
+        .filter((im) => im.mime && im.data);
+      const text = String(body.text || '').trim();
+      if (!text && !images.length) return fail(req, res, 400, '给点文字或者一张医嘱图片');
+
+      const parsed = await parseMedication({ text, images, todayStr: body.today });
+
+      // 图片留底，处方单过两个月还想回头看
+      const savedImages = [];
+      for (const im of images.slice(0, 4)) {
+        const s = await care.saveImage({ mime: im.mime, data: im.data });
+        if (s.ok) savedImages.push(s.image);
+      }
+      return ok(req, res, { ...parsed, images: savedImages });
+    }
+
+    /** 医嘱原图 */
+    if (p.startsWith('/api/care/images/') && method === 'GET') {
+      const id = decodeURIComponent(p.slice('/api/care/images/'.length));
+      const hit = care.imageFile(id);
+      if (!hit) return fail(req, res, 404, '图片不存在');
+      const stat = await fsp.stat(hit.path);
+      res.writeHead(200, {
+        'Content-Type': hit.mime,
+        'Content-Length': stat.size,
+        'Cache-Control': 'private, max-age=31536000, immutable',
+        ...corsHeaders(req),
+      });
+      return fs.createReadStream(hit.path).pipe(res);
+    }
+
+    // ---------- 快捷提醒 ----------
+    if (p === '/api/care/reminders' && method === 'GET') {
+      const now = Date.now();
+      const all = care.listReminders();
+      return ok(req, res, {
+        reminders: all,
+        upcoming: upcomingReminders(all, now),
+        past: all.filter((r) => (parseLocalISO(r.at) || 0) <= now || r.done).slice(-30).reverse(),
+      });
+    }
+
+    if (p === '/api/care/reminders' && method === 'POST') {
+      const body = await readBody(req);
+      const r = await care.saveReminder(body);
+      if (!r.ok) return fail(req, res, 400, r.error);
+      return ok(req, res, { reminder: r.reminder });
+    }
+
+    if (p.startsWith('/api/care/reminders/') && method === 'DELETE') {
+      const id = decodeURIComponent(p.slice('/api/care/reminders/'.length));
+      const r = await care.removeReminder(id);
+      if (!r.ok) return fail(req, res, 404, r.error);
+      return ok(req, res, { removed: id });
+    }
+
+    /**
+     * 看看一条记录里有没有「到点要做的事」。
+     * 不在保存流程里调用：记录是最高频的操作，不能被一次 AI 调用拖慢。
+     */
+    if (p === '/api/care/reminders/detect' && method === 'POST') {
+      if (!aiEnabled()) return fail(req, res, 503, '服务端未配置 DEEPSEEK_API_KEY');
+      const body = await readBody(req);
+      const text = String(body.text || '').trim();
+      if (!text) return fail(req, res, 400, '没有要判断的内容');
+      // 同一条笔记已经问过一次就不再问，免得反复弹
+      const entryId = String(body.entryId || '').trim();
+      if (entryId && care.hasReminderForEntry(entryId)) return ok(req, res, { found: false, skipped: 'asked' });
+      const found = await detectReminder({ text, todayStr: body.today, nowTs: Date.now() });
+      return ok(req, res, found);
+    }
+
+    // ---------- 学习模式 ----------
+    if (p === '/api/care/focus' && method === 'GET') {
+      const now = Date.now();
+      const focus = care.getFocus();
+      const blocking = blockedPackages(focus.blocks, now, focus.alwaysAllow);
+      const log = care.focusLogRecent(60);
+      const n = nextBlockStart(focus.blocks, now);
+      return ok(req, res, {
+        focus,
+        now: { blocking: !!blocking.block, block: blocking.block, packages: blocking.packages, remaining: blocking.block ? blockRemainingMin(blocking.block, now) : 0 },
+        next: n ? { at: n.at, label: n.block.label } : null,
+        // 最近 60 天的专注统计，给用户一点正反馈
+        stats: {
+          sessions: log.length,
+          minutes: log.reduce((s, r) => s + (r.minutes || 0), 0),
+          todayMinutes: log.filter((r) => dateStr(new Date(r.ts)) === dateStr(new Date())).reduce((s, r) => s + (r.minutes || 0), 0),
+          week: (() => {
+            const since = Date.now() - 7 * 86400000;
+            return log.filter((r) => r.ts >= since).reduce((s, r) => s + (r.minutes || 0), 0);
+          })(),
+        },
+      });
+    }
+
+    if (p === '/api/care/focus' && (method === 'PUT' || method === 'POST')) {
+      const body = await readBody(req);
+      const r = await care.saveFocus(body);
+      if (!r.ok) return fail(req, res, 400, r.error);
+      return ok(req, res, { focus: r.focus });
+    }
+
+    if (p === '/api/care/focus/log' && method === 'POST') {
+      const body = await readBody(req);
+      const r = await care.logFocus({ minutes: body.minutes, blockId: body.blockId, label: body.label, ended: body.ended });
+      if (!r.ok) return fail(req, res, 400, r.error);
+      return ok(req, res, { record: r.record });
+    }
+
+    /**
+     * 未来一段时间所有该响的提醒。
+     * 客户端（尤其是安卓那边）拿这张表去排本地通知/闹钟，
+     * 什么时候响、响什么、要不要闹钟模式，全在这里算完。
+     */
+    if (p === '/api/care/schedule' && method === 'GET') {
+      const days = Number(q.get('days') || 7);
+      const now = Date.now();
+      const focus = care.getFocus();
+      const blocking = blockedPackages(focus.blocks, now, focus.alwaysAllow);
+      return ok(req, res, {
+        generatedAt: now,
+        schedule: buildSchedule({ meds: care.listMeds(), doses: care.doseLog(), reminders: care.listReminders() }, { days, now }),
+        // 学习模式只把「下一次该锁什么」告诉客户端：锁是本地行为，
+        // 但「现在该不该锁」的判断和提醒一样统一在这里做
+        focusBlocks: focus.blocks,
+        focusAlwaysAllow: focus.alwaysAllow,
+        // 展开成具体的起止时刻，安卓的无障碍服务照着这个查就行
+        focusIntervals: buildFocusIntervals(focus.blocks, { days, now, alwaysAllow: focus.alwaysAllow }),
+        focus: {
+          blocking: !!blocking.block,
+          label: blocking.block?.label || '',
+          packages: blocking.packages,
+          remaining: blocking.block ? blockRemainingMin(blocking.block, now) : 0,
+          next: (() => {
+            const n = nextBlockStart(focus.blocks, now);
+            return n ? { at: n.at, label: n.block.label, packages: [] } : null;
+          })(),
+        },
+      });
     }
 
     // ---------- AI 对话（流式） ----------

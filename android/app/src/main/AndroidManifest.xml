@@ -24,6 +24,60 @@
 
         </activity>
 
+        <!--
+          学习模式的「专注中」页。
+          excludeFromRecents + noHistory：它不该出现在最近任务里，
+          也不该留在返回栈上（退出去就该真的退出去）。
+          taskAffinity 留空，免得它被并进主任务栈。
+        -->
+        <activity
+            android:name=".FocusOverlayActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/AppTheme.NoActionBarLaunch" />
+
+        <!--
+          无障碍服务。
+          permission 用系统的 BIND_ACCESSIBILITY_SERVICE：加了这个之后
+          只有系统能绑定它，别的应用绑不上。
+        -->
+        <service
+            android:name=".FocusAccessibilityService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- 闹钟到点：只弹一条通知，不做别的 -->
+        <receiver
+            android:name=".AlarmReceiver"
+            android:exported="false" />
+
+        <!--
+          开机 / 应用更新之后重排闹钟。
+          AlarmManager 里排的闹钟重启就全没了，不重排的话吃药提醒会
+          「静悄悄地不工作」—— 这是这类功能最坏的一种失败方式。
+        -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -42,6 +96,33 @@
     <!-- 语音记录：录音 + 音频设置 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!--
+      提醒相关。
+      POST_NOTIFICATIONS 是 Android 13+ 才要的，低版本会自动忽略。
+      SCHEDULE_EXACT_ALARM 让提醒准点到；没授权会退化成普通闹钟（可能晚几分钟），
+      界面上会如实说明并给一个去授权的入口，而不是假装设好了。
+      USE_FULL_SCREEN_INTENT 是 Android 14+ 的全屏提醒，只有勾了「用闹钟提醒」
+      的那几次才用得上。
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!--
+      列已安装的应用（学习模式要选锁哪些）。
+      刻意**不用** QUERY_ALL_PACKAGES —— 那是个很宽的权限，
+      而我们只要「能启动的应用」，用 queries 精确声明就够了。
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <!-- 声明需要麦克风，系统才会按「有麦克风的应用」处理（不是必需，但更规范） -->
     <uses-feature android:name="android.hardware.microphone" android:required="false" />

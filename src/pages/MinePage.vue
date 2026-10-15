@@ -16,11 +16,16 @@ import { useRouter } from 'vue-router';
 import Icon from '../components/Icon.vue';
 import * as api from '../lib/api';
 import { fullDate, shortDate } from '../lib/date';
-import { doLogout, entries, loadProfile, profile, refresh, toast } from '../lib/store';
+import { careToday as care, doLogout, entries, loadProfile, profile, refresh, refreshCare, toast } from '../lib/store';
 
 const router = useRouter();
 
 const stats = ref<{ total: number; days: number; streak: number; chars: number; firstDate: string | null } | null>(null);
+/** 关怀区块里的时间只显示 HH:MM，日期在标题上已经说清楚了 */
+function hhmmOf(ts: number) {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 const totalChars = computed(() => stats.value?.chars ?? entries.value.reduce((s, e) => s + e.content.length, 0));
 const oldest = computed(() => (stats.value?.firstDate ? fullDate(stats.value.firstDate) : '暂无'));
@@ -67,7 +72,7 @@ async function logout() {
 
 onMounted(async () => {
   await refresh({ silent: true });
-  await Promise.all([load(), profile.value ? Promise.resolve() : loadProfile()]);
+  await Promise.all([load(), refreshCare(), profile.value ? Promise.resolve() : loadProfile()]);
 });
 </script>
 
@@ -101,6 +106,49 @@ onMounted(async () => {
       </span>
       <Icon name="arrowRight" :size="16" class="sc-go" />
     </button>
+
+    <!-- ============ 关怀：吃药 / 提醒 / 学习模式 ============ -->
+    <!--
+      放在统计卡下面、我的记录上面。
+      这几个功能是「每天都可能要看一眼」的，不能塞进设置里（设置是偶尔去调一次的地方）；
+      但底栏那五个位置是钉死的结构，也不适合再塞。
+      吃药那块做成通栏，因为它的状态（今天还有几次没吃）比入口本身重要。
+    -->
+    <section class="group">
+      <h2 class="group-title">关怀</h2>
+
+      <button class="care-med" :class="{ due: care?.meds.pending, late: care?.meds.overdue }" @click="router.push('/meds')">
+        <span class="cm-icon"><Icon name="pill" :size="19" /></span>
+        <span class="cm-text">
+          <b>吃药提醒</b>
+          <em v-if="care && care.meds.plan.length">
+            <template v-if="care.meds.pending">
+              今天还有 {{ care.meds.pending }} 次没吃<template v-if="care.meds.next">，下一次 {{ care.meds.next.slot }}</template>
+            </template>
+            <template v-else>今天的药都吃过了</template>
+          </em>
+          <em v-else>还没添加在吃的药</em>
+        </span>
+        <span v-if="care?.meds.overdue" class="cm-badge">{{ care.meds.overdue }} 次过点了</span>
+        <Icon name="arrowRight" :size="15" class="chev" />
+      </button>
+
+      <div class="care-grid">
+        <button class="care-tile" @click="router.push('/reminders')">
+          <span class="ct-icon brand"><Icon name="bell" :size="17" /></span>
+          <b>快捷提醒</b>
+          <em v-if="care?.reminders.length">{{ care.reminders.length }} 条等着</em>
+          <em v-else>说了「几点要干嘛」我会问你</em>
+        </button>
+        <button class="care-tile" @click="router.push('/focus')">
+          <span class="ct-icon ai"><Icon name="hourglass" :size="17" /></span>
+          <b>学习模式</b>
+          <em v-if="care?.focus.blocking">正在专注 · {{ care.focus.label }}</em>
+          <em v-else-if="care?.focus.next">下一次 {{ hhmmOf(care.focus.next.at) }}</em>
+          <em v-else>到点锁住分心的应用</em>
+        </button>
+      </div>
+    </section>
 
     <!-- ============ 我的记录 ============ -->
     <section class="group">
@@ -290,6 +338,140 @@ onMounted(async () => {
 /* ---------- 分组菜单 ---------- */
 .group {
   margin-top: 22px;
+}
+
+/* ---------- 关怀区块 ---------- */
+.care-med {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 8px;
+  border-radius: var(--r-lg);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--dur), transform var(--dur);
+}
+
+.care-med:active {
+  transform: scale(0.99);
+}
+
+/* 有药没吃的时候整块提一下，扫一眼就知道今天还没完事 */
+.care-med.due {
+  border-color: var(--brand);
+}
+
+.care-med.late {
+  border-color: var(--rose);
+}
+
+.cm-icon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--brand-tint);
+  color: var(--brand-deep);
+}
+
+.care-med.late .cm-icon {
+  background: var(--rose-tint);
+  color: var(--rose-text);
+}
+
+.cm-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cm-text b {
+  font-size: 0.96rem;
+  font-weight: 640;
+}
+
+.cm-text em {
+  font-style: normal;
+  font-size: 0.79rem;
+  color: var(--text-2);
+}
+
+.cm-badge {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 620;
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  background: var(--rose-tint);
+  color: var(--rose-text);
+}
+
+.care-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.care-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 13px;
+  border-radius: var(--r-lg);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur);
+}
+
+.care-tile:active {
+  transform: scale(0.98);
+}
+
+.ct-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 3px;
+}
+
+.ct-icon.brand {
+  background: var(--brand-tint);
+  color: var(--brand-deep);
+}
+
+.ct-icon.ai {
+  background: var(--ai-tint);
+  color: var(--ai-text);
+}
+
+.care-tile b {
+  font-size: 0.9rem;
+  font-weight: 620;
+}
+
+.care-tile em {
+  font-style: normal;
+  font-size: 0.73rem;
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
+.care-med .chev {
+  flex: 0 0 auto;
+  color: var(--text-3);
 }
 
 .group-title {

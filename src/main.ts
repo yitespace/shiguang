@@ -9,6 +9,9 @@ import StatsPage from './pages/StatsPage.vue';
 import SettingsPage from './pages/SettingsPage.vue';
 import MinePage from './pages/MinePage.vue';
 import ProfilePage from './pages/ProfilePage.vue';
+import MedsPage from './pages/MedsPage.vue';
+import RemindersPage from './pages/RemindersPage.vue';
+import FocusPage from './pages/FocusPage.vue';
 
 // 用 hash 路由：静态托管无需任何服务端重写规则，任何路径刷新都不会 404
 const router = createRouter({
@@ -26,6 +29,10 @@ const router = createRouter({
     { path: '/profile', name: 'profile', component: ProfilePage },
     { path: '/search', redirect: '/find' },
     { path: '/chat/:id?', redirect: '/find' },
+    // 关怀三件套：吃药、提醒、学习模式。入口在「我的」页顶部的关怀区块
+    { path: '/meds', name: 'meds', component: MedsPage },
+    { path: '/reminders', name: 'reminders', component: RemindersPage },
+    { path: '/focus', name: 'focus', component: FocusPage },
     { path: '/stats', name: 'stats', component: StatsPage },
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/:pathMatch(.*)*', redirect: '/' },

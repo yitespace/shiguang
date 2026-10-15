@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「专注中」的全屏页。
+  这一页会在黑名单应用被切到前台时盖上去，所以它得好看 ——
+  一天要看它好几次的东西，做得像报错页只会让人把 App 卸了。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp"
+    android:background="@color/focus_bg">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/focus_overlay_title"
+        android:textColor="@color/focus_text_dim"
+        android:textSize="15sp"
+        android:letterSpacing="0.08" />
+
+    <TextView
+        android:id="@+id/focus_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="15dp"
+        android:textColor="@color/focus_text"
+        android:textSize="30sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/focus_countdown"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:textColor="@color/focus_text_dim"
+        android:textSize="16sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="26dp"
+        android:gravity="center"
+        android:lineSpacingExtra="6dp"
+        android:text="@string/focus_overlay_hint"
+        android:textColor="@color/focus_text_dim"
+        android:textSize="14sp" />
+
+    <Button
+        android:id="@+id/focus_home"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginTop="36dp"
+        android:paddingStart="34dp"
+        android:paddingEnd="34dp"
+        android:background="@drawable/bg_focus_btn"
+        android:text="@string/focus_overlay_home"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp" />
+
+    <Button
+        android:id="@+id/focus_giveup"
+        android:layout_width="wrap_content"
+        android:layout_height="44dp"
+        android:layout_marginTop="10dp"
+        android:background="@android:color/transparent"
+        android:text="@string/focus_overlay_giveup"
+        android:textAllCaps="false"
+        android:textColor="@color/focus_text_dim"
+        android:textSize="14sp" />
+</LinearLayout>

@@ -6,6 +6,8 @@
 
 import { computed, ref } from 'vue';
 import * as api from './api';
+import * as careApi from './care';
+import type { CareToday } from './care';
 import type { AsrInfo, AudioAttachment, AuthStatus, Entry, Stats, TimeRange } from '../types';
 
 const LS_ENTRIES = 'shiguang.entries.v1';
@@ -265,6 +267,24 @@ export async function flushQueue() {
 }
 
 // ---------- 启动 ----------
+/**
+ * 今天的关怀状态（有没有没吃的药、有没有快到点的提醒、现在该不该专注）。
+ *
+ * 放在 store 里、并进启动流程，而不是让各页面自己拉：
+ * 首页那张「还有 N 次药没吃」的卡如果晚一拍才插进去，会把整条时间线
+ * 往下推一次 —— 用户看到的就是「页面刚打开自己跳了一下」。
+ * 跟着 bootstrap 一起加载，等外壳显示出来的时候它已经在了。
+ */
+export const careToday = ref<CareToday | null>(null);
+
+export async function refreshCare() {
+  try {
+    careToday.value = await careApi.careToday();
+  } catch {
+    /* 拉不到就当没有，首页不显示那张卡，绝不因此弹错误 */
+  }
+}
+
 export async function bootstrap() {
   initTheme();
 
@@ -291,8 +311,9 @@ export async function bootstrap() {
     model.value = st.model;
     if (st.asr) asr.value = st.asr;
     if (st.authed) {
-      await refresh({ silent: true });
-      await loadProfile();
+      // 记录、资料、关怀状态一起拉：这几样都决定首屏长什么样，
+      // 分两批会让首屏先画一次再跳一次
+      await Promise.all([refresh({ silent: true }), loadProfile(), refreshCare()]);
     }
   } catch {
     // 服务器暂时不可达：如果本地有缓存就允许离线浏览
@@ -468,12 +489,33 @@ export async function saveEntry(input: SaveInput): Promise<Entry> {
     entries.value = entries.value.map((e) => (e.id === entry.id ? entry : e));
     writeLS(LS_ENTRIES, entries.value);
     refreshStats();
+    announceSaved(entry);
     return entry;
   } catch {
     enqueue('put', { ...input, id: optimistic.id, createdAt });
     toast('已存到本地，联网后自动同步');
+    // 离线也照样问一次：识别是打服务器的，失败就什么都不做，
+    // 但联网的时候用户不该因为「刚才断了一下」就少了这个功能
+    announceSaved(optimistic);
     return optimistic;
   }
+}
+
+/**
+ * 广播「刚存了一条」。
+ *
+ * 放在这里而不是两个弹层里：saveEntry 是所有保存路径的唯一出口，
+ * 在这儿广播就不会出现「文字记录会问要不要设提醒、语音记录不会」这种
+ * 一半有一半没有的情况。
+ *
+ * 用 setTimeout 让出去一拍再发：调用方紧接着就会关弹层、弹 toast，
+ * 识别要打一次 AI，别和这些抢同一帧。
+ */
+function announceSaved(entry: Entry) {
+  if (!entry || entry.deleted) return;
+  window.setTimeout(() => {
+    window.dispatchEvent(new CustomEvent('sg:saved', { detail: { id: entry.id, content: entry.content } }));
+  }, 60);
 }
 
 /**

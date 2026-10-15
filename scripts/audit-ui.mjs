@@ -446,6 +446,13 @@ async function main() {
       '--disable-dev-shm-usage',
       '--hide-scrollbars',
       '--no-first-run',
+      /*
+       * 浏览器界面语言。注意：它管不了 <input type="time"> 的显示格式 ——
+       * 那玩意跟系统的 ICU 语言走，而这个容器里只有 C.utf8，
+       * 所以截图里的时间控件会显示成 "08:00 PM"。真机是中文系统就是 24 小时制，
+       * 别拿截图里的 AM/PM 当成 bug 去改。
+       */
+      '--lang=zh-CN',
       '--disable-crash-reporter',
       '--password-store=basic',
       '--use-mock-keyring',

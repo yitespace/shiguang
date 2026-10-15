@@ -7,17 +7,19 @@
 // 这样既有一眼看全局的月历，又有连续的阅读流，不用在两页之间跳。
 // =============================================================
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import Icon from '../components/Icon.vue';
+
 import EntryCard from '../components/EntryCard.vue';
 import MemoryCard from '../components/MemoryCard.vue';
 import * as api from '../lib/api';
 import { addMonths, calendarGrid, monthLabel, monthOf, relativeDay, shortDate, today, weekdayOf } from '../lib/date';
 import { renderMarkdown } from '../lib/markdown';
-import { entries, online, pendingCount, refresh, saveEntry, stats, toast } from '../lib/store';
+import { careToday, entries, online, pendingCount, refresh, refreshCare, saveEntry, stats, toast } from '../lib/store';
 import type { DaySummary } from '../types';
 
 const route = useRoute();
+const router = useRouter();
 const WEEK = ['一', '二', '三', '四', '五', '六', '日'];
 
 const month = ref(monthOf(today()));
@@ -27,6 +29,33 @@ const loadingMonth = ref(false);
 const expanded = ref(false);
 const memoryRef = ref<InstanceType<typeof MemoryCard> | null>(null);
 const timelineEl = ref<HTMLElement | null>(null);
+
+// ---------- 今天的药 ----------
+/*
+ * 只在「真有没吃的」时候显示 —— 常驻一张卡片会变成背景噪音，
+ * 而背景噪音是会被无视的，那就等于没有。
+ * 拉不到（没登录/断网/没配）就整块不显示，绝不在首页弹错误。
+ */
+/*
+ * 数据来自 store 的 careToday（跟着 bootstrap 一起加载的），
+ * 不是这里自己拉 —— 自己拉的话它会晚一拍插进来，把时间线整体往下推。
+ * 这里只负责在页面停留期间刷新一下，让它别太旧。
+ */
+const medsDue = computed(() => {
+  const m = careToday.value?.meds;
+  if (!m || !m.pending) return null;
+  return { pending: m.pending, overdue: m.overdue, next: m.next };
+});
+
+const nextMedText = computed(() => {
+  const n = medsDue.value?.next;
+  if (!n) return '';
+  const d = new Date(n.at);
+  const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const day = new Date();
+  const sameDay = d.toDateString() === day.toDateString();
+  return sameDay ? `下一次 ${hhmm} · ${n.name}` : `下一次 明天 ${hhmm} · ${n.name}`;
+});
 
 // 快速记录
 const quick = ref('');
@@ -209,6 +238,8 @@ onMounted(async () => {
   }
   await refresh({ silent: true });
   await loadMonth();
+  // 后台刷一下关怀状态（比如刚刚在吃药页打了卡），不挡首屏
+  void refreshCare();
   await nextTick();
   // 只有带 ?d= 明确指定某天时才跳过去。
   // 平时进来停在顶部——日历是这一页的主角，一进来就滚走等于白做了。
@@ -318,6 +349,21 @@ const canGoNext = computed(() => month.value < monthOf(today()));
         </button>
       </div>
     </section>
+
+    <!--
+      ============ 今天还有药没吃 ============
+      只在真的有没吃的药时出现，不占常驻版面。
+      这件事比「今天记了几条」重要得多，所以要浮在时间线上面。
+    -->
+    <button v-if="medsDue" class="meds-due" :class="{ late: medsDue.overdue > 0 }" @click="router.push('/meds')">
+      <span class="md-icon"><Icon name="pill" :size="17" /></span>
+      <span class="md-text">
+        <b>还有 {{ medsDue.pending }} 次药没吃</b>
+        <em v-if="medsDue.next">{{ nextMedText }}</em>
+        <em v-else>今天该吃的都在这了</em>
+      </span>
+      <Icon name="arrowRight" :size="15" class="chev" />
+    </button>
 
     <!-- ============ 快速记录 ============ -->
     <section class="quick card">
@@ -611,6 +657,73 @@ const canGoNext = computed(() => month.value < monthOf(today()));
 .cal-day.is-selected .cal-dot {
   opacity: 0.95;
   background: #fff;
+}
+
+/* ---------- 今天还有药没吃 ---------- */
+.meds-due {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--r-lg);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--brand);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur);
+}
+
+.meds-due:active {
+  transform: scale(0.99);
+}
+
+.meds-due.late {
+  border-color: var(--rose);
+}
+
+.md-icon {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: var(--brand-tint);
+  color: var(--brand-deep);
+}
+
+.meds-due.late .md-icon {
+  background: var(--rose-tint);
+  color: var(--rose-text);
+}
+
+.md-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.md-text b {
+  font-size: 0.92rem;
+  font-weight: 640;
+}
+
+.md-text em {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meds-due .chev {
+  flex: 0 0 auto;
+  color: var(--text-3);
 }
 
 /* ---------- 快速记录 ---------- */

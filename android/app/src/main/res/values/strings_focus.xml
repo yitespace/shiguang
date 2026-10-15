@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_service_desc">学习模式：在你设定的时间段里，挡住你选的那些应用。</string>
+    <string name="focus_service_summary">只读取当前是哪个应用，不读取任何屏幕内容。</string>
+    <string name="focus_overlay_title">正 在 专 注</string>
+    <string name="focus_overlay_hint">这段时间是你自己设的。\n现在退出去，明天还得重新下决心一次。</string>
+    <string name="focus_overlay_home">回桌面</string>
+    <string name="focus_overlay_giveup">这次先算了</string>
+</resources>
