@@ -277,6 +277,20 @@ export async function flushQueue() {
  */
 export const careToday = ref<CareToday | null>(null);
 
+/**
+ * 连不上服务器。
+ *
+ * 和「没登录」是两件完全不同的事，以前却混在一起：authStatus 一失败就把
+ * authed 置成 false，于是网络断了的人会被扔到登录页，然后开始怀疑自己
+ * 密码记错了 —— 而问题根本不在这儿。
+ *
+ * 现在遇到了网络错误就把它标出来，界面显示一块「连不上服务器」，
+ * 说清楚是哪一步不通、能不能重试，而不是假装人家没登录。
+ */
+export const netDown = ref(false);
+/** 连不上时的具体提示，直接显示给用户 */
+export const netDownMsg = ref('');
+
 export async function refreshCare() {
   try {
     careToday.value = await careApi.careToday();
@@ -305,6 +319,8 @@ export async function bootstrap() {
 
   try {
     const st = await api.authStatus();
+    netDown.value = false;
+    netDownMsg.value = '';
     authed.value = st.authed;
     me.value = st.me || null;
     aiReady.value = st.ai;
@@ -315,14 +331,34 @@ export async function bootstrap() {
       // 分两批会让首屏先画一次再跳一次
       await Promise.all([refresh({ silent: true }), loadProfile(), refreshCare()]);
     }
-  } catch {
-    // 服务器暂时不可达：如果本地有缓存就允许离线浏览
-    authed.value = false;
-  me.value = null;
-  profile.value = null;
+  } catch (e: any) {
+    /*
+     * 服务器暂时不可达。
+     *
+     * status === 0 表示「根本没连上」，不是「服务器说你没登录」。
+     * 这两种情况要分开处理：连不上时把人踢到登录页，他会以为是自己
+     * 密码记错了，然后一遍遍重试 —— 真正的问题（网络）反而被藏起来了。
+     */
+    const offline = e instanceof api.ApiError && e.status === 0;
+    if (offline) {
+      netDown.value = true;
+      netDownMsg.value = String(e.message || '');
+      // 本地有缓存就当作还在登录态，至少能翻以前的记录
+      authed.value = cached.length > 0;
+    } else {
+      authed.value = false;
+      me.value = null;
+      profile.value = null;
+    }
   } finally {
     ready.value = true;
   }
+}
+
+/** 手动重试启动流程（界面上「再试一次」用的） */
+export async function retryBootstrap() {
+  ready.value = false;
+  await bootstrap();
 }
 
 /** 拉一次账号资料；失败不抛，页面照常显示 */

@@ -15,7 +15,10 @@ import { refreshSchedule } from './lib/native';
 import {
   authed,
   bootstrap,
+  netDown,
+  netDownMsg,
   online,
+  retryBootstrap,
   toast,
   pendingCount,
   ready,
@@ -158,6 +161,16 @@ onUnmounted(() => {
 });
 
 const isMine = computed(() => route.path.startsWith('/mine') || route.path.startsWith('/settings'));
+
+const retrying = ref(false);
+async function retry() {
+  retrying.value = true;
+  try {
+    await retryBootstrap();
+  } finally {
+    retrying.value = false;
+  }
+}
 </script>
 
 <template>
@@ -165,6 +178,30 @@ const isMine = computed(() => route.path.startsWith('/mine') || route.path.start
   <div v-if="!ready" class="boot">
     <div class="boot-mark"><Icon name="feather" :size="30" /></div>
     <p>拾光</p>
+  </div>
+
+  <!--
+    连不上服务器 ≠ 没登录。
+    网络断了的时候把人扔到登录页，他会以为是自己密码记错了。
+    这里单独给一块说明，讲清楚是连不上、以及能做什么。
+  -->
+  <div v-else-if="netDown && !authed" class="netdown">
+    <div class="nd-card">
+      <span class="nd-icon"><Icon name="wifiOff" :size="26" /></span>
+      <h1>连不上服务器</h1>
+      <p class="nd-msg">{{ netDownMsg || '网络不通，拾光打不开。' }}</p>
+      <ul class="nd-tips">
+        <li>检查一下这台设备的网络，特别是代理 / VPN 有没有把它挡住</li>
+        <li>浏览器里可以直接试这个地址：<code>./api/healthz</code></li>
+        <li>也可能是服务器正在重启，等十几秒再试</li>
+      </ul>
+      <div class="nd-acts">
+        <button class="btn btn-primary" @click="retry" :disabled="retrying">
+          {{ retrying ? '正在重试…' : '再试一次' }}
+        </button>
+      </div>
+      <p class="nd-foot">如果本地存过记录，联网之后会自动补传，不会丢。</p>
+    </div>
   </div>
 
   <LoginPage v-else-if="!authed" />
@@ -271,6 +308,96 @@ const isMine = computed(() => route.path.startsWith('/mine') || route.path.start
 </template>
 
 <style scoped>
+/* ---------- 连不上服务器 ---------- */
+.netdown {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--safe-top) + 24px) var(--pad) calc(var(--safe-bottom) + 24px);
+}
+
+.nd-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 28px 22px;
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+}
+
+.nd-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  background: var(--rose-tint);
+  color: var(--rose-text);
+  margin-bottom: 14px;
+}
+
+.nd-card h1 {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.nd-msg {
+  margin: 0 0 16px;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+.nd-tips {
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.nd-tips li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 0.79rem;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.nd-tips li::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0.62em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.nd-tips code {
+  font-family: var(--font-num);
+  font-size: 0.75rem;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-2);
+}
+
+.nd-acts {
+  display: flex;
+  justify-content: center;
+}
+
+.nd-foot {
+  margin: 14px 0 0;
+  font-size: 0.74rem;
+  color: var(--text-3);
+}
 .boot {
   min-height: 100dvh;
   display: grid;

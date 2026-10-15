@@ -1126,9 +1126,15 @@ server.listen(PORT, HOST, () => {
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, async () => {
     console.log(`[拾光] 收到 ${sig}，正在保存...`);
-    // 每个开过号的用户都有一份自己的 Store，逐个落盘
-    for (const [id, c] of contexts) {
+    // 每个开过号的用户都有一份自己的 Store，逐个落盘。
+    //
+    // contexts 里存的是**建上下文的 Promise**（见 ctxFor 的注释），
+    // 所以必须先 await 再取 store。直接写 c.store 拿到的是 undefined，
+    // 会在退出路径上报「Cannot read properties of undefined (reading 'flush')」——
+    // 而且那是个只进日志的错误，很容易一直没人发现。
+    for (const [id, p] of contexts) {
       try {
+        const c = await p;
         await c.store.flush();
       } catch (e) {
         console.error(`保存失败（${id}）`, e);

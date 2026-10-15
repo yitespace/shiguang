@@ -66,19 +66,39 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 单个请求的超时。
+ *
+ * 没有超时的话，遇到「能连上但不回包」的网络（代理挂了一半、运营商劫持、
+ * 弱网丢包）请求会一直挂着 —— 界面停在转圈上，用户完全不知道发生了什么，
+ * 只能一遍遍刷新。宁可 15 秒后明确报一句「连不上」。
+ */
+const REQUEST_TIMEOUT_MS = 15000;
+
 export async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   let res: Response;
+  // 调用方自己带了 signal 就别覆盖（AI 流式回答要能中途取消）
+  const ctl = opts.signal ? null : new AbortController();
+  const timer = ctl ? window.setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS) : 0;
   try {
     res = await fetch(`${BASE}${path}`, {
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       ...opts,
+      ...(ctl ? { signal: ctl.signal } : {}),
     });
-  } catch {
+  } catch (e: any) {
+    const aborted = e?.name === 'AbortError';
     throw new ApiError(
-      isNativeShell() ? '连不上服务器，请检查手机网络后重试' : '网络连接失败，请检查网络后重试',
+      aborted
+        ? '服务器一直没有回应（等了 15 秒）。可能是网络不通，稍后再试。'
+        : isNativeShell()
+          ? '连不上服务器，请检查手机网络后重试'
+          : '网络连接失败，请检查网络后重试',
       0,
     );
+  } finally {
+    if (timer) window.clearTimeout(timer);
   }
   let json: any = null;
   let parseFailed = false;
