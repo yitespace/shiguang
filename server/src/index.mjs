@@ -273,6 +273,28 @@ function readBody(req, limit = 2 * 1024 * 1024) {
   });
 }
 
+/**
+ * 请求日志。
+ *
+ * 以前只记 /api/ai/*，于是「用户说所有请求都红了」这种问题根本没法查 ——
+ * 日志里既看不到请求有没有到，也看不到返回了什么。排查全靠猜。
+ * 现在每个接口请求都记一行，格式固定，方便 grep：
+ *
+ *   [拾光] 请求 GET /api/entries 200 3ms 1.2.3.4
+ *
+ * 刻意**不记查询串**：/api/search?q=... 里是用户搜的内容，
+ * 那是私人的东西，不该落到服务器日志里。路径本身（/api/search）不敏感。
+ */
+function logRequest(req, res, pathname, method, started) {
+  // 静态资源不记：一个页面能带出十几个，把有用的行全冲掉了
+  if (!pathname.startsWith('/api/')) return;
+  const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '')
+    .split(',')[0]
+    .trim()
+    .replace(/^::ffff:/, '');
+  console.log(`[拾光] 请求 ${method} ${pathname} ${res.statusCode} ${Date.now() - started}ms ${ip}`);
+}
+
 /** 转写完成后把文本写回附件元数据（index.jsonl 追加一条新版本，重启后仍在） */
 async function storeMetaUpdate(audio, rec) {
   const dir = path.dirname(audio.absPath(rec) || '');
@@ -1071,9 +1093,7 @@ const server = http.createServer(async (req, res) => {
     console.error('[拾光] 接口出错', p, err);
     return fail(req, res, 500, String(err?.message || '服务器内部错误'));
   } finally {
-    if (p.startsWith('/api/ai/')) {
-      console.log(`[拾光] ${method} ${p} ${Date.now() - started}ms`);
-    }
+    logRequest(req, res, p, method, started);
   }
 });
 

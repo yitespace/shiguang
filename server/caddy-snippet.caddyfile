@@ -6,6 +6,27 @@
 # =============================================================
 
 	# ── 拾光（记录 + AI 回忆）──────────────────────────────
+	#
+	# 访问日志。
+	# 为什么必须开着：出过一次「用户说所有请求都红了」，而当时既没有
+	# Caddy 访问日志、Node 也只记 AI 接口，于是完全无法回答最基本的问题 ——
+	# 请求到底有没有到服务器。最后只能靠排除法猜。
+	# 有了它，下次直接 `tail -f /var/log/caddy/shiguang.log` 就够了：
+	#   日志里没有 → 请求根本没到，问题在浏览器/网络/代理
+	#   日志里有但状态码不对 → 问题在服务器
+	#
+	# 只记请求行和状态码，不记 body；查询串会被 Caddy 记下来（搜索词在里面），
+	# 所以这个文件只在服务器上、权限收紧，不往外发。
+	# 走 stderr（也就是 journald），不自己写文件。
+	# 试过 output file /var/log/caddy/...，caddy 用户对那个目录明明有写权限，
+	# 重载还是报 permission denied —— 这个系统上有 AppArmor 之类的沙箱在拦。
+	# 走 journald 少一个权限面，而且日志轮转、按服务过滤都是白送的：
+	#   journalctl -u caddy -f | grep shiguang
+	log {
+		output stderr
+		format console
+	}
+
 	# /shiguang/api/* → 本机 Node 服务；其余交给静态文件服务
 	handle /shiguang/api/* {
 		uri strip_prefix /shiguang
