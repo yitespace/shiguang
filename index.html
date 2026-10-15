@@ -7,6 +7,12 @@
     <meta name="description" content="拾光：随手记录每天发生的事，用对话的方式让 AI 帮你找回任何一天的细节。" />
     <meta name="theme-color" content="#faf7f2" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16130f" media="(prefers-color-scheme: dark)" />
+    <!--
+      apple- 那个是给旧 iOS 用的，Chrome 会警告它已废弃；
+      mobile-web-app-capable 是标准写法。两个都留着：
+      iOS 16 之前只认前者，新浏览器认后者。警告本身不影响功能。
+    -->
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="拾光" />
     <link rel="manifest" href="./manifest.webmanifest" />

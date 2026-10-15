@@ -386,18 +386,25 @@ async function main() {
       const r = await fetch(api + '/care/reminders/detect', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: '我晚上十点有一个会，得提前准备一下' }),
+        body: JSON.stringify({ text: '明天下午三点要去医院复诊，得提前把材料准备好' }),
       }).then(x => x.json());
       return JSON.stringify({ ok: r.ok, found: r.data?.found, title: r.data?.title, at: r.data?.at });
     `);
     const det = JSON.parse(String(detected));
     if (det.ok && det.found) {
-      check('「晚上十点有个会」被认出来了', det.title === '开会' || /会/.test(String(det.title)), JSON.stringify(det));
-      check('认出来的时间是今天晚上十点', /T22:00$/.test(String(det.at)), String(det.at));
-    } else {
-      // 没配 AI Key 时这条跳过，但要说不清为什么，别静悄悄地过
+      check('「明天下午三点去医院复诊」被认出来了', /复诊|医院/.test(String(det.title)), JSON.stringify(det));
+      check('认出来的时间是明天下午三点', /T15:00$/.test(String(det.at)), String(det.at));
+    } else if (det.ok === false) {
+      // 没配 AI Key 时接口会直接 503，这种情况允许跳过，但要说明白，别静悄悄地过
       console.log(`  \x1b[33m! 跳过自动识别（接口返回 ${JSON.stringify(det)}）\x1b[0m`);
-      check('识别接口可用（没配 AI Key 时允许跳过）', det.ok === false, JSON.stringify(det));
+    } else {
+      /*
+       * 接口通了却没认出来 —— 这是**失败**，不是「跳过」。
+       * 第一版把这种情况也当成「没配 Key」放过去了，于是用例在 22 点之后
+       * 会静静地变绿：其实是因为「晚上十点」当天已经过去，服务器
+       * 正确地拒绝了它。用例本身有时间依赖，藏了一个真问题。
+       */
+      check('带将来时间的记录应该被认出来', false, JSON.stringify(det));
     }
 
     const noise = await apiCall(`
@@ -447,7 +454,8 @@ async function main() {
           const ta = document.querySelector('.quick textarea');
           if (!ta) return 'no-input';
           const set = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-          set.call(ta, '我晚上十点有一个会，得提前把材料准备好');
+          // 用「明天」而不是「今晚十点」：这条用例不该因为跑在几点而变绿或变红
+          set.call(ta, '明天下午三点要去医院复诊，得提前把材料准备好');
           ta.dispatchEvent(new Event('input', { bubbles: true }));
           return 'ok';
         })()
@@ -466,7 +474,7 @@ async function main() {
       check('写完带时间的记录之后会浮出「要不要设提醒」', promptUp === true);
       if (promptUp) {
         const pText = await ev(`document.querySelector('.prompt')?.innerText.replace(/\\n/g, ' ') || ''`);
-        check('浮卡里写清楚了是什么事', /会/.test(String(pText)), String(pText).slice(0, 70));
+        check('浮卡里写清楚了是什么事', /复诊|医院/.test(String(pText)), String(pText).slice(0, 70));
         await shot('07-写完记录后的提醒浮卡', false);
 
         await ev(`Array.from(document.querySelectorAll('.prompt .btn')).find(b => /好/.test(b.innerText))?.click()`);
@@ -493,7 +501,7 @@ async function main() {
     await apiCall(`
       const list = await fetch(api + '/entries?limit=50', { credentials: 'include' }).then(r => r.json());
       for (const e of (list.data?.entries || [])) {
-        if (e.content.includes('晚上十点有一个会')) {
+        if (e.content.includes('明天下午三点要去医院复诊')) {
           await fetch(api + '/entries/' + e.id, { method: 'DELETE', credentials: 'include' });
         }
       }
