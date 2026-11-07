@@ -57,7 +57,36 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- 闹钟到点：只弹一条通知，不做别的 -->
+        <!--
+          吃药闹钟的全屏页。
+          独立任务栈 + 不进最近任务：它只在响的那几十秒存在，
+          退出去就该真的退出去。
+        -->
+        <activity
+            android:name=".MedAlarmActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:noHistory="true"
+            android:showOnLockScreen="true"
+            android:taskAffinity=""
+            android:theme="@style/AppTheme.NoActionBarLaunch" />
+
+        <!--
+          响铃服务：循环播放闹铃 + 震动。
+          必须是前台服务 —— 用户没打开 App 的时候才最需要它响，
+          普通后台进程那一刻就会被系统回收。
+        -->
+        <service
+            android:name=".RingService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="medication reminder alarm ringtone" />
+        </service>
+
+        <!-- 闹钟到点：普通提醒弹通知，闹钟模式拉起全屏页 -->
         <receiver
             android:name=".AlarmReceiver"
             android:exported="false" />
@@ -111,6 +140,9 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 响铃服务要以前台服务跑，Android 14+ 还要声明具体用途 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!--
       列已安装的应用（学习模式要选锁哪些）。

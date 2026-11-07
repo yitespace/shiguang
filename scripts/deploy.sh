@@ -81,7 +81,9 @@ fi
 # ---------------------------------------------------------------
 if [ "$BUILD" = "1" ]; then
   say "构建前端"
-  pnpm build
+  # 用 npm 而不是 pnpm：项目搬过一次目录之后，pnpm 会因为 node_modules 里的
+  # 软链指回旧路径而想整份重装，非交互环境下直接中止（ERR_PNPM_ABORTED_...）。
+  npm run build
   [ -f dist/index.html ] || { bad "构建产物缺失"; exit 1; }
   ok "构建完成（$(du -sh dist | cut -f1)）"
 else

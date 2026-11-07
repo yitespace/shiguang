@@ -32,22 +32,47 @@ const fullSvg = fs.readFileSync('public/favicon.svg', 'utf8');
 // 自适应图标（Android 8+）：背景单独一层
 const bgSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#6d5efc"/>
-      <stop offset="100%" stop-color="#12b3a8"/>
-    </linearGradient>
+    <radialGradient id="g" cx="50%" cy="38%" r="72%">
+      <stop offset="0%" stop-color="#fff6e2"/>
+      <stop offset="100%" stop-color="#ffe2ad"/>
+    </radialGradient>
   </defs>
   <rect width="108" height="108" fill="url(#g)"/>
 </svg>`;
 
-// 前景只放羽毛，缩到 62% 保证不被系统裁切
 const fgSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
-  <g transform="translate(54 54) scale(0.62) translate(-32 -32)">
-    <g fill="none" stroke="#ffffff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M46 26.5a11 11 0 0 0-15.5-15.5L22 22.5V41h18.5z"/>
-      <path d="M38 20 20 38"/>
+  <defs>
+    <linearGradient id="petal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffc93f"/>
+      <stop offset="100%" stop-color="#f39422"/>
+    </linearGradient>
+    <radialGradient id="core" cx="42%" cy="36%" r="70%">
+      <stop offset="0%" stop-color="#8a5a2b"/>
+      <stop offset="100%" stop-color="#5d3a18"/>
+    </radialGradient>
+  </defs>
+  <g transform="translate(54 54) scale(2.75) translate(-12 -12)">
+    <g fill="url(#petal)">
+      <g transform="rotate(0 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(30 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(60 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(90 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(120 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(150 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(180 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(210 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(240 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(270 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(300 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
+      <g transform="rotate(330 12 12)"><ellipse cx="12" cy="4.6" rx="1.9" ry="3.05"/></g>
     </g>
-    <circle cx="24.5" cy="24.5" r="2.6" fill="#ffffff"/>
+    <circle cx="12" cy="12" r="5.05" fill="url(#core)"/>
+    <g fill="#2b1a0c">
+      <circle cx="10.3" cy="11.15" r="0.7"/>
+      <circle cx="13.7" cy="11.15" r="0.7"/>
+    </g>
+    <path d="M10.1 13.2c.55.7 1.18 1.05 1.9 1.05s1.35-.35 1.9-1.05"
+          fill="none" stroke="#2b1a0c" stroke-width="0.76" stroke-linecap="round"/>
   </g>
 </svg>`;
 
@@ -148,10 +173,16 @@ async function main() {
 
   /** 渲染一个 SVG 并截图存盘 */
   async function render(svg, size, outPath, opaque = true) {
-    const scaled = svg
-      .replace(/width="64" height="64"/, `width="${size}" height="${size}"`)
-      .replace(/width="108" height="108"/, `width="${size}" height="${size}"`);
-    const html = `<!doctype html><html><body style="margin:0;width:${size}px;height:${size}px;overflow:hidden;background:transparent">${scaled}</body></html>`;
+    /*
+     * 不靠替换 width/height 属性来缩放 —— 之前就是这么写的，
+     * 结果换成 24×24 viewBox 的 favicon 之后，正则没命中，
+     * 图标就渲染成一个 24px 的小点缩在左上角。
+     * 现在直接用 CSS 让 svg 撑满容器，任何尺寸的源都能正确出图。
+     */
+    const html = `<!doctype html><html><head><style>
+      html,body{margin:0;width:${size}px;height:${size}px;overflow:hidden;background:transparent}
+      svg{display:block;width:100%;height:100%}
+    </style></head><body>${svg}</body></html>`;
     const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 
     await send(
@@ -193,6 +224,20 @@ async function main() {
   fs.writeFileSync(path.join(anydpi, 'ic_launcher.xml'), adaptive);
   fs.writeFileSync(path.join(anydpi, 'ic_launcher_round.xml'), adaptive);
   console.log('✓ mipmap-anydpi-v26 自适应图标');
+
+      // ---- PWA 图标（public/ 下那三个 png）----
+      // 以前是手工导出的，换图标之后没人记得重新导，网页版就还挂着旧标。
+      // 现在跟 Android 图标一起生成，换一次图标只跑一条命令。
+      const fullForPwa = fs.readFileSync('public/favicon.svg', 'utf8');
+      await render(fullForPwa, 192, 'public/icon-192.png');
+      await render(fullForPwa, 512, 'public/icon-512.png');
+      // maskable：Android 会把图标裁成圆形/圆角，四周要留足安全边距
+      const maskable = fullForPwa.replace(
+        '<rect width="24" height="24" rx="6"',
+        '<g transform="translate(12 12) scale(0.78) translate(-12 -12)"><rect width="24" height="24"',
+      );
+      await render(maskable, 512, 'public/icon-512-maskable.png');
+      console.log('✓ PWA 图标 icon-192 / icon-512 / icon-512-maskable');
 
   try {
     ws.close();

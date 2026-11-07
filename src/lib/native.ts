@@ -138,6 +138,10 @@ export async function reschedule(items: ScheduleItem[]): Promise<{ ok: boolean; 
           body: x.body,
           alarm: x.alarm,
           kind: x.kind,
+          // 全屏闹钟页点「吃了」之后，要能说清楚是哪一顿
+          medId: x.kind === 'med' ? x.refId : '',
+          date: x.date || '',
+          slot: x.slot || '',
         })),
       });
       return { ok: true, count: r?.count ?? items.length };
@@ -150,6 +154,34 @@ export async function reschedule(items: ScheduleItem[]): Promise<{ ok: boolean; 
 }
 
 /** 取消所有提醒 */
+/**
+ * 用户在原生全屏闹钟页点了「吃了」。
+ * 原生那边只记下是哪一顿，真正打卡要带着登录态在这里做。
+ * 返回 null 表示没有待处理的。
+ */
+export async function takePending(): Promise<{ medId: string; date: string; slot: string } | null> {
+  const p = ShiguangNotify();
+  if (!p?.pendingTake) return null;
+  try {
+    const r = await p.pendingTake();
+    if (!r?.medId || !r?.slot) return null;
+    return { medId: String(r.medId), date: String(r.date || ''), slot: String(r.slot) };
+  } catch {
+    return null;
+  }
+}
+
+/** 取走之后必须清掉，否则每次启动都会重复打卡 */
+export async function clearPendingTake(): Promise<void> {
+  const p = ShiguangNotify();
+  if (!p?.clearPendingTake) return;
+  try {
+    await p.clearPendingTake();
+  } catch {
+    /* 忽略 */
+  }
+}
+
 export async function cancelAll(): Promise<void> {
   const p = ShiguangNotify();
   if (p?.cancelAll) {
@@ -230,7 +262,7 @@ export async function focusStatus(): Promise<FocusStatus> {
   }
 }
 
-/** 跳到系统的无障碍设置页，让用户手动把拾光打开 */
+/** 跳到系统的无障碍设置页，让用户手动把向阳花圃打开 */
 export async function openAccessibilitySettings(): Promise<void> {
   const p = ShiguangFocus();
   if (p?.openSettings) {

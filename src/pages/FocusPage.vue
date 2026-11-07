@@ -189,7 +189,7 @@ async function save() {
 
 async function askPermission() {
   await openAccessibilitySettings();
-  toast('在「无障碍」里找到拾光并打开，回来点一下刷新');
+  toast('在「无障碍」里找到向阳花圃并打开，回来点一下刷新');
 }
 
 async function recheck() {
@@ -289,7 +289,7 @@ onMounted(load);
         <div class="cap-body">
           <b>{{ status?.supported ? '还差一步：打开无障碍权限' : '这里拦不住你刷手机' }}</b>
           <p v-if="status?.supported">
-            拾光要靠在系统的「无障碍」里注册一个服务，才能发现你切到了哪个应用并把它盖住。
+            向阳花圃要靠在系统的「无障碍」里注册一个服务，才能发现你切到了哪个应用并把它盖住。
             系统不允许 App 自己打开这个权限，只能你手动去开一次（开完就一直有效）。
           </p>
           <p v-else>

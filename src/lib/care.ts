@@ -30,6 +30,14 @@ export interface Med {
   alarm: boolean;
   /** true = 「必要时服用」，只进清单、不排定时提醒 */
   prn: boolean;
+  /**
+   * 周期性服药：吃 onDays 天、停 offDays 天，循环。
+   * 比如「连吃 21 天停 7 天」—— startDate 就是第 1 天。
+   * null 表示天天吃。
+   */
+  cycle: { onDays: number; offDays: number } | null;
+  /** 到点没签到时，要不要每 30 分钟继续提醒（最多 5 次） */
+  keepReminding: boolean;
   enabled: boolean;
   source: 'manual' | 'text' | 'voice' | 'photo';
   imageId: string;
@@ -50,6 +58,9 @@ export interface PlanItem {
   status: 'pending' | 'taken' | 'skipped';
   takenAt: number | null;
   overdue: boolean;
+  keepReminding: boolean;
+  /** 今天处在周期的第几天（界面上显示「第 3/21 天」） */
+  cycle: { onDays: number; offDays: number; day: number; cycleLen: number } | null;
 }
 
 export interface CareToday {

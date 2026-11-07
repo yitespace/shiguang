@@ -63,11 +63,41 @@ function guessDate(text: string): string | null {
 
 let guessTouched = false;
 
+/**
+ * 自适应高度。
+ *
+ * 注意两个坑，都是「光标跑到文末」的来源：
+ *   1. 中文输入法正在组词时（isComposing）绝对不能动高度 ——
+ *      有的 WebView 会因此打断组词，把候选框里的内容重排到末尾。
+ *   2. 改 height 会让部分浏览器重置选区。改之前记下 selectionStart/End，
+ *      改完发现被挪了就还原。
+ * 这两种情况只出现在手机 WebView 和中文输入法上，桌面 Chrome 里没有，
+ * 所以「本机复现不出来」不等于没 bug。
+ */
+const composing = ref(false);
+
 function autoResize() {
   const el = ta.value;
   if (!el) return;
+  // isComposing 不在 TS 的 HTMLTextAreaElement 类型里，但所有现代浏览器都实现了
+  if (composing.value || (el as any).isComposing) return;
+  const start = el.selectionStart;
+  const end = el.selectionEnd;
+  const prev = el.style.height;
   el.style.height = 'auto';
-  el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
+  const next = `${Math.min(el.scrollHeight, 320)}px`;
+  if (next === prev) {
+    el.style.height = prev;
+    return;
+  }
+  el.style.height = next;
+  if (el.selectionStart !== start || el.selectionEnd !== end) {
+    try {
+      el.setSelectionRange(start, end);
+    } catch {
+      /* 部分输入类型不支持 setSelectionRange，忽略 */
+    }
+  }
 }
 
 function addTag(raw?: string) {
@@ -227,6 +257,8 @@ async function del() {
               placeholder="今天做了…（回车换行，Ctrl/⌘ + Enter 保存）"
               @keydown.ctrl.enter="submit"
               @keydown.meta.enter="submit"
+              @compositionstart="composing = true"
+              @compositionend="composing = false; autoResize()"
             ></textarea>
           </div>
 

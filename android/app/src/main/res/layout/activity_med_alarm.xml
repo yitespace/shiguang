@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  吃药闹钟的全屏页。
+  这一屏是在「必须让人醒过来」的前提下设计的：
+  大字、深色底、三个明确的选择，没有别的东西抢注意力。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="30dp"
+    android:background="@color/alarm_bg">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/med_alarm_kicker"
+        android:textColor="@color/alarm_dim"
+        android:textSize="14sp"
+        android:letterSpacing="0.12" />
+
+    <TextView
+        android:id="@+id/med_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:gravity="center"
+        android:textColor="@color/alarm_text"
+        android:textSize="27sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/med_body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:lineSpacingExtra="5dp"
+        android:textColor="@color/alarm_dim"
+        android:textSize="16sp" />
+
+    <Button
+        android:id="@+id/med_taken"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="40dp"
+        android:background="@drawable/bg_med_primary"
+        android:text="@string/med_alarm_taken"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <Button
+        android:id="@+id/med_snooze"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_med_ghost"
+        android:text="@string/med_alarm_snooze"
+        android:textAllCaps="false"
+        android:textColor="@color/alarm_text"
+        android:textSize="16sp" />
+
+    <Button
+        android:id="@+id/med_close"
+        android:layout_width="wrap_content"
+        android:layout_height="44dp"
+        android:layout_marginTop="10dp"
+        android:background="@android:color/transparent"
+        android:text="@string/med_alarm_close"
+        android:textAllCaps="false"
+        android:textColor="@color/alarm_dim"
+        android:textSize="14sp" />
+</LinearLayout>

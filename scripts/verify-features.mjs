@@ -470,7 +470,9 @@ async function main() {
     );
     check('底栏左一是「过往」', bar.links[0] === '过往', `实际 ${bar.links[0]}`);
     check('底栏左二是「拾迹」', bar.links[1] === '拾迹', `实际 ${bar.links[1]}`);
-    check('底栏右二是「统计」', bar.links[2] === '统计', `实际 ${bar.links[2]}`);
+    // 底栏第三格原来是「统计」，改成「功能」了：
+    // 统计挪进「我的 → 我的记录 → 统计」，位置留给以后的小工具。
+    check('底栏右二是「功能」', bar.links[2] === '功能', `实际 ${bar.links[2]}`);
     check('底栏右一是「我的」', bar.links[3] === '我的', `实际 ${bar.links[3]}`);
     check('底栏共 4 个带字入口', bar.links.length === 4, `实际 ${bar.links.length} 个`);
     check('中间大按钮只有图标没有文字', bar.fabText === '', `实际「${bar.fabText}」`);

@@ -2,14 +2,15 @@
 // =============================================================
 // 我的
 //
-// 一级页面只干一件事：让这个人看见自己的记录。
-//   1. 顶部渐变头图（头像 + 昵称 + 一句状态），整块可点，进「个人资料」
-//   2. 统计卡用负边距上浮，压住头图下缘，点进去看完整统计
-//   3. 我的记录：统计、导出、累计字数、第一条
-//   4. 退出登录单独一块
+// 这一页回答两个问题：「我记了多少东西」和「今天有什么要我照顾的」。
 //
-// 账号、通用、服务状态这些跟「看记录」无关的东西都收进了个人资料页
-// （点头像进去），一级页面才不会越堆越长。
+// 排版上刻意做了三件事，都是为了别变成一摞长得一样的白卡：
+//   1. 头图只放身份，不再在它上面叠一张浮起来的统计卡 —— 少一层，页面立刻清爽
+//   2. 统计数字平铺在头图下沿，不加卡片、不加阴影，安静地待在第二层
+//   3. 「关怀」是唯一需要每天看一眼的模块，给它带颜色的块；
+//      记录和账号一律普通白卡，视觉重量从上往下递减
+//
+// 账号、通用、服务状态这些和「看记录」无关的都在个人资料页（点头像进去）。
 // =============================================================
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -21,6 +22,7 @@ import { careToday as care, doLogout, entries, loadProfile, profile, refresh, re
 const router = useRouter();
 
 const stats = ref<{ total: number; days: number; streak: number; chars: number; firstDate: string | null } | null>(null);
+
 /** 关怀区块里的时间只显示 HH:MM，日期在标题上已经说清楚了 */
 function hhmmOf(ts: number) {
   const d = new Date(ts);
@@ -38,8 +40,8 @@ const avatarChar = computed(() => profile.value?.nickname?.trim().slice(0, 1) ||
 
 /**
  * 头图那句副标题。
- * 有简介就显示简介（这是用户自己写的，优先级最高）；
- * 没有就退回到记录足迹。要短到一行放得下——头图窄，左边还有头像。
+ * 有简介就显示简介（用户自己写的，优先级最高）；没有就退回到记录足迹。
+ * 要短到一行放得下 —— 头图窄，左边还有头像。
  */
 const footprint = computed(() => {
   const bio = profile.value?.bio?.trim();
@@ -56,6 +58,14 @@ const statsItems = computed(() => [
   { value: stats.value?.days ?? 0, label: '天有记录' },
   { value: stats.value?.streak ?? 0, label: '天连续', hot: (stats.value?.streak ?? 0) >= 3 },
 ]);
+
+/** 吃药那句状态：没吃 / 过点 / 吃完 / 还没添加 */
+const medText = computed(() => {
+  const m = care.value?.meds;
+  if (!m || !m.plan.length) return '还没添加在吃的药';
+  if (!m.pending) return '今天的药都吃过了';
+  return m.next ? `今天还有 ${m.pending} 次没吃 · 下一次 ${m.next.slot}` : `今天还有 ${m.pending} 次没吃`;
+});
 
 async function load() {
   try {
@@ -78,73 +88,84 @@ onMounted(async () => {
 
 <template>
   <div class="mine-page">
-    <!-- ============ 头图：整块可点，进个人资料 ============ -->
+    <!-- ============ 身份条：整块可点，进个人资料 ============ -->
     <!--
-      用 <a href> 而不是 <button>：<a> 的内容模型是透明的，
-      里面可以放 <h1>；<button> 只允许短语内容，塞标题是非法 HTML。
-      而且真链接能中键新开、能右键复制地址，比按钮更像个入口。
+      用 <a href> 而不是 <button>：<a> 的内容模型是透明的，里面可以放 <h1>；
+      <button> 只允许短语内容，塞标题是非法 HTML。
+      真链接还能中键新开、右键复制地址，比按钮更像个入口。
     -->
     <header class="hero">
       <a class="hero-hit" href="#/profile">
         <span class="hero-avatar" aria-hidden="true">
           <span v-if="avatarChar" class="hero-initial">{{ avatarChar }}</span>
-          <Icon v-else name="feather" :size="26" />
+          <Icon v-else name="feather" :size="24" />
         </span>
         <span class="hero-id">
           <h1 class="hero-name">{{ title }}</h1>
           <span class="hero-sub">{{ footprint }}</span>
         </span>
-        <Icon name="arrowRight" :size="18" class="hero-go" />
+        <Icon name="arrowRight" :size="17" class="hero-go" />
       </a>
     </header>
 
-    <!-- ============ 统计卡：上浮压住头图下缘 ============ -->
-    <button class="stat-card" @click="router.push('/stats')">
-      <span v-for="it in statsItems" :key="it.label" class="sc-cell">
-        <b class="sc-num" :class="{ hot: it.hot }">{{ it.value }}</b>
-        <em class="sc-label">{{ it.label }}</em>
+    <!-- ============ 统计：平铺一行，不是卡片 ============ -->
+    <!--
+      之前这里是一张浮在白卡上的统计卡，压着头图下沿。
+      它让页面多出一层「浮起来的东西」，而且和下面的关怀卡、记录卡长得一样重。
+      现在改成平铺：没有外框、没有阴影，只有数字和极细的分隔线，
+      视线扫过去就知道「我记了多少」，但不会被它抢走注意力。
+    -->
+    <button class="stats" @click="router.push('/stats')">
+      <span v-for="it in statsItems" :key="it.label" class="st-cell">
+        <b class="st-num" :class="{ hot: it.hot }">{{ it.value }}</b>
+        <em class="st-label">{{ it.label }}</em>
       </span>
-      <Icon name="arrowRight" :size="16" class="sc-go" />
+      <Icon name="arrowRight" :size="15" class="st-go" />
     </button>
 
-    <!-- ============ 关怀：吃药 / 提醒 / 学习模式 ============ -->
+    <!-- ============ 关怀 ============ -->
     <!--
-      放在统计卡下面、我的记录上面。
-      这几个功能是「每天都可能要看一眼」的，不能塞进设置里（设置是偶尔去调一次的地方）；
-      但底栏那五个位置是钉死的结构，也不适合再塞。
-      吃药那块做成通栏，因为它的状态（今天还有几次没吃）比入口本身重要。
+      这是唯一需要每天看一眼的模块，所以给它颜色和重量；
+      下面的「我的记录」和「退出登录」都退成安静的白卡，形成层级。
     -->
     <section class="group">
       <h2 class="group-title">关怀</h2>
 
-      <button class="care-med" :class="{ due: care?.meds.pending, late: care?.meds.overdue }" @click="router.push('/meds')">
-        <span class="cm-icon"><Icon name="pill" :size="19" /></span>
-        <span class="cm-text">
-          <b>吃药提醒</b>
-          <em v-if="care && care.meds.plan.length">
-            <template v-if="care.meds.pending">
-              今天还有 {{ care.meds.pending }} 次没吃<template v-if="care.meds.next">，下一次 {{ care.meds.next.slot }}</template>
-            </template>
-            <template v-else>今天的药都吃过了</template>
+      <button class="med-card" :class="{ due: care?.meds.pending, late: care?.meds.overdue }" @click="router.push('/meds')">
+        <span class="med-icon"><Icon name="pill" :size="18" /></span>
+        <span class="med-body">
+          <b class="med-name">吃药提醒</b>
+          <!--
+            状态和「过点了几次」放在同一行里。
+            以前过点是个红药丸挂在右边，和箭头挤在一起抢位置；
+            现在它只是状态句子末尾的一点强调色。
+          -->
+          <em class="med-state">
+            {{ medText }}<template v-if="care?.meds.overdue"><span class="med-late"> · {{ care.meds.overdue }} 次过点了</span></template>
           </em>
-          <em v-else>还没添加在吃的药</em>
         </span>
-        <span v-if="care?.meds.overdue" class="cm-badge">{{ care.meds.overdue }} 次过点了</span>
         <Icon name="arrowRight" :size="15" class="chev" />
       </button>
 
       <div class="care-grid">
-        <button class="care-tile" @click="router.push('/reminders')">
-          <span class="ct-icon brand"><Icon name="bell" :size="17" /></span>
-          <b>快捷提醒</b>
-          <em v-if="care?.reminders.length">{{ care.reminders.length }} 条等着</em>
+        <button class="care-tile brand" @click="router.push('/reminders')">
+          <span class="ct-head">
+            <span class="ct-icon"><Icon name="bell" :size="16" /></span>
+            <b>快捷提醒</b>
+            <Icon name="arrowRight" :size="13" class="ct-chev" />
+          </span>
+          <em v-if="care?.reminders.length">{{ care.reminders.length }} 条等着提醒</em>
           <em v-else>说了「几点要干嘛」我会问你</em>
         </button>
-        <button class="care-tile" @click="router.push('/focus')">
-          <span class="ct-icon ai"><Icon name="hourglass" :size="17" /></span>
-          <b>学习模式</b>
+
+        <button class="care-tile ai" @click="router.push('/focus')">
+          <span class="ct-head">
+            <span class="ct-icon"><Icon name="hourglass" :size="16" /></span>
+            <b>学习模式</b>
+            <Icon name="arrowRight" :size="13" class="ct-chev" />
+          </span>
           <em v-if="care?.focus.blocking">正在专注 · {{ care.focus.label }}</em>
-          <em v-else-if="care?.focus.next">下一次 {{ hhmmOf(care.focus.next.at) }}</em>
+          <em v-else-if="care?.focus.next">下一次 {{ hhmmOf(care.focus.next.at) }} 开始</em>
           <em v-else>到点锁住分心的应用</em>
         </button>
       </div>
@@ -179,31 +200,34 @@ onMounted(async () => {
       </div>
     </section>
 
-    <!-- ============ 退出登录：单独一块 ============ -->
+    <!-- ============ 退出登录 ============ -->
+    <!--
+      单独一张卡、单一行、红字居中，不再是一个和内容卡一样宽的描边大按钮 ——
+      那个形状太重了，看起来像页面的主要内容。
+    -->
     <button class="logout" @click="logout">
-      <Icon name="x" :size="17" /> 退出登录
+      <Icon name="x" :size="16" /> 退出登录
     </button>
 
-    <p class="version">拾光 v1.0.0</p>
-    <p class="version sub">所有记录都只存在你自己的服务器上</p>
+    <p class="version">向阳花圃 v1.0.0 · 所有记录只存在你自己的服务器上</p>
   </div>
 </template>
 
 <style scoped>
+/* ---------- 身份条 ---------- */
 /*
- * 头图。
- * 移动端用负边距顶到屏幕最上沿（连安全区一起吃掉），
- * 桌面端收成一张圆角卡片，不然一条通栏色带横在侧栏旁边很怪。
+ * 移动端用负边距顶到最上沿（连安全区一起吃掉），桌面端收成圆角卡片。
+ * 高度比之前矮了一截：以前底部多留 48px 是为了让统计卡压上来，
+ * 现在统计是平铺的，那段空白就没必要了。
  */
 .hero {
   margin: calc(-1 * (var(--safe-top) + 10px)) calc(-1 * var(--pad)) 0;
-  padding: calc(var(--safe-top) + 14px) var(--pad) 48px;
+  padding: calc(var(--safe-top) + 14px) var(--pad) 22px;
   background: var(--hero-grad);
   border-radius: 0 0 var(--r-xl) var(--r-xl);
   color: var(--on-hero);
 }
 
-/* 整块可点，所以做成一个按钮；样式上仍按一行排布 */
 .hero-hit {
   width: 100%;
   display: flex;
@@ -221,21 +245,21 @@ onMounted(async () => {
 
 .hero-avatar {
   flex: 0 0 auto;
-  width: 54px;
-  height: 54px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   background: var(--on-hero);
   color: var(--hero-ink);
-  font-size: 1.35rem;
+  font-size: 1.3rem;
   font-weight: 680;
   line-height: 1;
 }
 
 .hero-avatar :deep(svg) {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
 }
 
 .hero-id {
@@ -243,25 +267,25 @@ onMounted(async () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
 .hero-name {
-  display: block;
-  font-size: 1.34rem;
+  margin: 0;
+  font-size: 1.32rem;
   font-weight: 680;
   letter-spacing: -0.02em;
+  line-height: 1.25;
   color: var(--on-hero);
-  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .hero-sub {
-  margin-top: 4px;
-  font-size: 0.8rem;
-  line-height: 1.5;
+  font-size: 0.82rem;
   color: var(--on-hero);
+  opacity: 0.86;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -270,84 +294,89 @@ onMounted(async () => {
 .hero-go {
   flex: 0 0 auto;
   color: var(--on-hero);
-  opacity: 0.9;
+  opacity: 0.75;
 }
 
-/* ---------- 统计卡：负边距上浮，压住头图下缘 ---------- */
-.stat-card {
+/* ---------- 统计：平铺一行 ---------- */
+/*
+ * 没有外框、没有阴影、没有白色底 —— 它就长在页面上。
+ * 用上下两条极细的分隔线把它和头图、关怀分开，靠留白而不是靠卡片来分组。
+ */
+.stats {
   width: 100%;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: -30px;
-  padding: 15px 14px;
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
-  transition: transform var(--dur);
+  align-items: stretch;
+  padding: 14px 2px 15px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  transition: opacity var(--dur);
 }
 
-.stat-card:active {
-  transform: scale(0.99);
+.stats:active {
+  opacity: 0.7;
 }
 
-.sc-cell {
+.st-cell {
   flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  position: relative;
 }
 
-/* 分隔线用边框画，别塞一个空元素进去（列布局里它会变成一条横杠） */
-.sc-cell + .sc-cell {
-  border-left: 1px solid var(--border-2);
+.st-cell + .st-cell {
+  border-left: 1px solid var(--border);
 }
 
-.sc-num {
-  font-size: 1.45rem;
-  font-weight: 680;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  color: var(--brand-deep);
+.st-num {
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
+  font-size: 1.28rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--text);
 }
 
-:root[data-theme='dark'] .sc-num {
-  color: var(--brand-soft);
+.st-num.hot {
+  color: var(--brand-deep);
 }
 
-.sc-num.hot {
-  color: var(--amber-text);
-}
-
-.sc-label {
+.st-label {
   font-style: normal;
-  font-size: 0.72rem;
+  font-size: 0.73rem;
   color: var(--text-3);
-  white-space: nowrap;
 }
 
-.sc-go {
+.st-go {
+  align-self: center;
   flex: 0 0 auto;
+  margin-left: 2px;
   color: var(--text-3);
 }
 
-/* ---------- 分组菜单 ---------- */
+/* ---------- 分组 ---------- */
 .group {
-  margin-top: 22px;
+  margin-top: 26px;
 }
 
-/* ---------- 关怀区块 ---------- */
-.care-med {
+.group-title {
+  font-size: 0.76rem;
+  font-weight: 620;
+  color: var(--text-3);
+  letter-spacing: 0.08em;
+  margin: 0 4px 9px;
+}
+
+/* ---------- 吃药：带色的主卡 ---------- */
+.med-card {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px;
-  margin-bottom: 8px;
+  padding: 13px 14px;
+  margin-bottom: 9px;
   border-radius: var(--r-lg);
   text-align: left;
   background: var(--surface);
@@ -356,81 +385,81 @@ onMounted(async () => {
   transition: border-color var(--dur), transform var(--dur);
 }
 
-.care-med:active {
+.med-card:active {
   transform: scale(0.99);
 }
 
-/* 有药没吃的时候整块提一下，扫一眼就知道今天还没完事 */
-.care-med.due {
+/* 有药没吃：描边提亮，扫一眼就知道今天还没完事 */
+.med-card.due {
   border-color: var(--brand);
 }
 
-.care-med.late {
+.med-card.late {
   border-color: var(--rose);
 }
 
-.cm-icon {
+.med-icon {
   flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
   display: grid;
   place-items: center;
   background: var(--brand-tint);
   color: var(--brand-deep);
 }
 
-.care-med.late .cm-icon {
+.med-card.late .med-icon {
   background: var(--rose-tint);
   color: var(--rose-text);
 }
 
-.cm-text {
+.med-body {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
-.cm-text b {
-  font-size: 0.96rem;
+.med-name {
+  font-size: 0.95rem;
   font-weight: 640;
+  color: var(--text);
 }
 
-.cm-text em {
+.med-state {
   font-style: normal;
   font-size: 0.79rem;
   color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.cm-badge {
-  flex: 0 0 auto;
-  font-size: 0.72rem;
-  font-weight: 620;
-  padding: 3px 9px;
-  border-radius: var(--r-full);
-  background: var(--rose-tint);
+.med-late {
   color: var(--rose-text);
+  font-weight: 600;
 }
 
+/* ---------- 两个小入口 ---------- */
+/*
+ * 用很淡的品牌色/青绿底，和下面的白卡拉开一档：
+ * 眼睛从上往下扫，重量是递减的（吃药 > 两个入口 > 白卡列表）。
+ */
 .care-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 9px;
 }
 
 .care-tile {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 13px;
+  gap: 6px;
+  padding: 12px 13px;
   border-radius: var(--r-lg);
   text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
   transition: transform var(--dur);
 }
 
@@ -438,52 +467,57 @@ onMounted(async () => {
   transform: scale(0.98);
 }
 
-.ct-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 3px;
+.care-tile.brand {
+  background: var(--brand-tint);
 }
 
-.ct-icon.brand {
-  background: var(--brand-tint);
+.care-tile.ai {
+  background: var(--ai-tint);
+}
+
+.ct-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ct-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.care-tile.brand .ct-icon {
   color: var(--brand-deep);
 }
 
-.ct-icon.ai {
-  background: var(--ai-tint);
+.care-tile.ai .ct-icon {
   color: var(--ai-text);
 }
 
-.care-tile b {
-  font-size: 0.9rem;
-  font-weight: 620;
+.ct-head b {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.89rem;
+  font-weight: 640;
+  color: var(--text);
 }
 
-.care-tile em {
-  font-style: normal;
-  font-size: 0.73rem;
-  color: var(--text-3);
-  line-height: 1.45;
-}
-
-.care-med .chev {
+.ct-chev {
   flex: 0 0 auto;
   color: var(--text-3);
 }
 
-.group-title {
-  font-size: 0.78rem;
-  font-weight: 620;
-  color: var(--text-3);
-  letter-spacing: 0.06em;
-  margin: 0 4px 8px;
+.care-tile em {
+  font-style: normal;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-2);
 }
 
+/* ---------- 记录列表 ---------- */
 .menu {
-  padding: 4px 0;
+  padding: 3px 0;
   overflow: hidden;
 }
 
@@ -497,6 +531,10 @@ onMounted(async () => {
   transition: background var(--dur);
 }
 
+.menu-row + .menu-row {
+  border-top: 1px solid var(--border);
+}
+
 .menu-row:not(.static):hover {
   background: var(--surface-2);
 }
@@ -505,7 +543,6 @@ onMounted(async () => {
   background: var(--surface-3);
 }
 
-/* 左侧彩色圆角图标：一眼分得清是哪一类 */
 .mi {
   flex: 0 0 auto;
   width: 30px;
@@ -543,7 +580,7 @@ onMounted(async () => {
 
 .mv {
   flex: 0 0 auto;
-  font-size: 0.84rem;
+  font-size: 0.83rem;
   color: var(--text-2);
   max-width: 52%;
   overflow: hidden;
@@ -561,7 +598,8 @@ onMounted(async () => {
   color: var(--text-3);
 }
 
-/* ---------- 退出登录：单独一块，不和别的操作混排 ---------- */
+/* ---------- 退出登录 ---------- */
+/* 一张白卡、一行红字。不再是和内容卡一样宽的描边大按钮。 */
 .logout {
   width: 100%;
   display: flex;
@@ -574,7 +612,7 @@ onMounted(async () => {
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--rose-text);
-  font-size: 0.94rem;
+  font-size: 0.92rem;
   font-weight: 560;
   transition: background var(--dur);
 }
@@ -583,19 +621,13 @@ onMounted(async () => {
   background: var(--rose-tint);
 }
 
-.logout:active {
-  transform: scale(0.99);
-}
-
+/* ---------- 版本 ---------- */
 .version {
   text-align: center;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   color: var(--text-3);
-  margin-top: 22px;
-}
-
-.version.sub {
-  margin-top: 4px;
+  margin: 18px 4px 4px;
+  line-height: 1.6;
 }
 
 /* ---------- 桌面端：头图收成卡片 ---------- */
@@ -603,7 +635,7 @@ onMounted(async () => {
   .hero {
     /* 桌面端整页是居中一列，头图跟着这一列走，别再往外扩 */
     margin: 0;
-    padding: 26px 26px 48px;
+    padding: 22px 24px;
     border-radius: var(--r-xl);
   }
 }

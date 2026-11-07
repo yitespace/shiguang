@@ -11,12 +11,15 @@
 //   · 每种模式只显示自己需要的输入框，绝不并排出现
 //   · 底部最多一句提示，且只在真的需要时出现
 // =============================================================
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import Icon from '../components/Icon.vue';
 import * as api from '../lib/api';
 import { doLogin, doRegister, reloadSession } from '../lib/store';
 
 type Mode = 'password' | 'sms' | 'register';
+
+/** 品牌图标：放在 public/ 下，用 BASE_URL 拼路径，换了部署目录也不会裂 */
+const logoSrc = `${import.meta.env.BASE_URL}icon-192.png`;
 
 const mode = ref<Mode>('password');
 
@@ -35,6 +38,34 @@ let timer: number | undefined;
 const smsReady = computed(() => !!methods.value?.sms);
 const registerOpen = computed(() => !!methods.value?.register);
 const phoneOk = computed(() => /^1[3-9]\d{9}$/.test(phone.value));
+
+/**
+ * 手机号归一化。
+ *
+ * 中文输入法很容易打出全角数字，粘贴时也常带着空格或 +86。
+ * 这些都会让 /^1[3-9]\d{9}$/ 判不过，而界面上只表现为「按钮不亮」——
+ * 用户根本不知道是哪儿不对，只会觉得「点了没反应」。所以直接在输入时就洗掉。
+ */
+function normalizePhone(v: string) {
+  return String(v || '')
+    // 全角数字 → 半角
+    .replace(/[\uFF10-\uFF19]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/[^\d]/g, '')
+    .replace(/^861(?=\d{10}$)/, '1')
+    .replace(/^86(?=1\d{10}$)/, '')
+    .slice(0, 11);
+}
+
+watch(phone, (v) => {
+  const n = normalizePhone(v);
+  if (n !== v) phone.value = n;
+});
+
+/** 邀请码：去掉空格、统一大写（服务端也不区分大小写，这里只是让用户少犯错） */
+watch(inviteCode, (v) => {
+  const n = String(v || '').trim().toUpperCase();
+  if (n !== v) inviteCode.value = n;
+});
 const canSend = computed(() => phoneOk.value && countdown.value === 0 && !busy.value);
 
 const canSubmitLogin = computed(() => phoneOk.value && password.value.length > 0);
@@ -49,6 +80,29 @@ const tabs = computed(() => {
   if (smsReady.value) list.push({ key: 'sms', label: '验证码登录' });
   if (registerOpen.value) list.push({ key: 'register', label: '注册' });
   return list;
+});
+
+/**
+ * 按钮为什么点不了。
+ *
+ * 以前按钮灰着就只是灰着 —— 用户看一眼不知道缺什么，只会反复点。
+ * 这里把差的那一项直接写出来，贴在按钮下面。
+ */
+const disabledHint = computed(() => {
+  if (mode.value === 'register') {
+    if (!phoneOk.value) return '手机号还得填满 11 位';
+    if (inviteCode.value.trim().length < 4) return '还没填邀请码';
+    if (password.value.length < 6) return `密码还差 ${6 - password.value.length} 位`;
+    return '';
+  }
+  if (mode.value === 'sms') {
+    if (!phoneOk.value) return '手机号还得填满 11 位';
+    if (code.value.length < 4) return '还没填验证码';
+    return '';
+  }
+  if (!phoneOk.value) return '手机号还得填满 11 位';
+  if (!password.value.length) return '还没填密码';
+  return '';
 });
 
 /** 底部提示：只在真的需要说的时候才占一行 */
@@ -139,9 +193,9 @@ onUnmounted(() => window.clearInterval(timer));
 <template>
   <div class="gate">
     <div class="gate-card">
-      <div class="gate-mark"><Icon name="feather" :size="30" /></div>
-      <h1>拾光</h1>
-      <p class="desc">随手记下每天发生的事，<br />再用对话的方式，把它们找回来。</p>
+      <div class="gate-mark"><img class="gate-logo" :src="logoSrc" alt="" /></div>
+      <h1>向阳花圃</h1>
+      <p class="desc">记下今天，照顾好自己，<br />一点点把生活养回来。</p>
 
       <!-- 登录 / 注册。配了短信才会多出「验证码登录」 -->
       <div v-if="tabs.length > 1" class="tabs" role="tablist">
@@ -188,6 +242,7 @@ onUnmounted(() => window.clearInterval(timer));
         <button class="btn btn-primary btn-block submit" :disabled="busy || !canSubmitLogin" @click="submitLogin">
           {{ busy ? '正在验证…' : '进入' }}
         </button>
+        <p v-if="disabledHint && !busy" class="need">{{ disabledHint }}</p>
       </template>
 
       <!-- ② 验证码登录（只有配了短信才有这一栏） -->
@@ -211,6 +266,7 @@ onUnmounted(() => window.clearInterval(timer));
         <button class="btn btn-primary btn-block submit" :disabled="busy || !canSubmitSms" @click="submitSms">
           {{ busy ? '正在验证…' : '进入' }}
         </button>
+        <p v-if="disabledHint && !busy" class="need">{{ disabledHint }}</p>
       </template>
 
       <!-- ③ 注册 -->
@@ -240,6 +296,7 @@ onUnmounted(() => window.clearInterval(timer));
         <button class="btn btn-primary btn-block submit" :disabled="busy || !canSubmitRegister" @click="submitRegister">
           {{ busy ? '正在创建…' : '注册并进入' }}
         </button>
+        <p v-if="disabledHint && !busy" class="need">{{ disabledHint }}</p>
       </template>
 
       <p v-if="err" class="err">{{ err }}</p>
@@ -308,6 +365,15 @@ onUnmounted(() => window.clearInterval(timer));
 
 .send-code:disabled {
   opacity: var(--disabled-opacity);
+}
+
+/* 按钮灰着的时候，把「还差什么」写在下面 */
+.need {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-3);
+  text-align: center;
 }
 
 .submit {

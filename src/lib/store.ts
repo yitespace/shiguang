@@ -8,6 +8,7 @@ import { computed, ref } from 'vue';
 import * as api from './api';
 import * as careApi from './care';
 import type { CareToday } from './care';
+import { clearPendingTake, takePending } from './native';
 import type { AsrInfo, AudioAttachment, AuthStatus, Entry, Stats, TimeRange } from '../types';
 
 const LS_ENTRIES = 'shiguang.entries.v1';
@@ -299,6 +300,31 @@ export async function refreshCare() {
   }
 }
 
+/**
+ * 把「在原生闹钟页点了吃了」的那一条真正写进服务器。
+ *
+ * 流程：闹钟响 → 全屏页 → 点「吃了」→ 原生只记下来 → 打开 App →
+ * 这里带着登录态调用打卡接口 → 清掉待办 → 重排提醒（那顿不再催）。
+ * 原生不碰网络、不碰登录态，所有判断都留在 JS 里。
+ */
+async function flushPendingTake() {
+  const pending = await takePending();
+  if (!pending) return;
+  try {
+    await careApi.logDose(pending.medId, {
+      at: pending.slot,
+      date: pending.date || undefined,
+      action: 'taken',
+    });
+    toast('已记下：刚刚那次药吃过了');
+    await refreshCare();
+  } catch {
+    // 打卡失败就别清 —— 下次启动还有机会补上
+    return;
+  }
+  await clearPendingTake();
+}
+
 export async function bootstrap() {
   initTheme();
 
@@ -330,6 +356,7 @@ export async function bootstrap() {
       // 记录、资料、关怀状态一起拉：这几样都决定首屏长什么样，
       // 分两批会让首屏先画一次再跳一次
       await Promise.all([refresh({ silent: true }), loadProfile(), refreshCare()]);
+      void flushPendingTake();
     }
   } catch (e: any) {
     /*

@@ -63,6 +63,15 @@ function cleanSlots(input) {
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
 
+/** 周期：吃 onDays 天、停 offDays 天。两边都得有正数才算数 */
+function cleanCycle(input) {
+  if (!input || typeof input !== 'object') return null;
+  const onDays = Math.round(Number(input.onDays) || 0);
+  const offDays = Math.round(Number(input.offDays) || 0);
+  if (onDays <= 0 || offDays <= 0) return null;
+  return { onDays: Math.min(365, onDays), offDays: Math.min(365, offDays) };
+}
+
 /** 星期几数组：0=周日。空数组或者给全 7 天都视为「每天」 */
 function cleanDays(input) {
   if (!Array.isArray(input)) return [];
@@ -193,6 +202,18 @@ export class Care {
          * 用户想吃的时候可以自己打卡，只是不会被催。
          */
         prn: bool(src.prn),
+        /*
+         * 周期性服药：吃 onDays 天、停 offDays 天。
+         * 比如「连吃 21 天停 7 天」是很多药的标准开法，不能只支持天天吃。
+         * 没设或者 offDays 为 0 就当天天吃。
+         */
+        cycle: cleanCycle(src.cycle),
+        /*
+         * 没签到时要不要继续催。
+         * 默认 true：漏服比被多提醒几次危险得多。
+         * 但用户可以在设置里关掉，尊重「我吃了只是懒得点」的情况。
+         */
+        keepReminding: src.keepReminding === undefined ? true : bool(src.keepReminding),
         enabled: src.enabled === undefined ? true : bool(src.enabled),
         source: ['manual', 'text', 'voice', 'photo'].includes(src.source) ? src.source : 'manual',
         imageId: str(src.imageId, 60),

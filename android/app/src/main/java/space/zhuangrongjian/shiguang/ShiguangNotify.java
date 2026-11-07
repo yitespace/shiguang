@@ -154,6 +154,10 @@ final class ShiguangNotify {
             fire.putExtra("title", title);
             fire.putExtra("body", body);
             fire.putExtra("alarm", alarm);
+            // 这三个是全屏页「吃了」按钮回传打卡时需要的
+            fire.putExtra("medId", it.optString("medId", ""));
+            fire.putExtra("date", it.optString("date", ""));
+            fire.putExtra("slot", it.optString("slot", ""));
 
             int reqCode = id.hashCode();
             int flags = PendingIntent.FLAG_UPDATE_CURRENT;
@@ -195,6 +199,33 @@ final class ShiguangNotify {
         SharedPreferences.Editor ed = prefs(ctx).edit().putString(KEY_SCHEDULE, new JSONArray(kept).toString());
         ed.apply();
         return count;
+    }
+
+    /**
+     * 「10 分钟后再叫我」。
+     *
+     * 只排一次，不写进持久化的排程里 —— 它是一次性的推迟，
+     * 不是新的日程。用一个固定的 id，连点几次也只会剩最后一个。
+     */
+    static void snoozeOnce(Context ctx, int minutes) {
+        AlarmManager am = ctx.getSystemService(AlarmManager.class);
+        if (am == null) return;
+        long at = System.currentTimeMillis() + Math.max(1, minutes) * 60000L;
+        Intent fire = new Intent(ctx, AlarmReceiver.class);
+        fire.setAction(AlarmReceiver.ACTION_FIRE);
+        fire.putExtra("id", "snooze");
+        fire.putExtra("title", "该吃药了");
+        fire.putExtra("body", "刚才的提醒你按了「等一会儿」。");
+        fire.putExtra("alarm", true);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent pi = PendingIntent.getBroadcast(ctx, "snooze".hashCode(), fire, flags);
+        try {
+            if (canExact(ctx)) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+            else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+        } catch (SecurityException e) {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+        }
     }
 
     static void cancelAll(Context ctx) {

@@ -1,7 +1,7 @@
 {
-  "name": "拾光 · 随手记录，AI 帮我回忆",
-  "short_name": "拾光",
-  "description": "随手记录每天发生的事，用对话的方式让 AI 帮你找回任何一天的细节。",
+  "name": "向阳花圃 · 陪你把生活一点点养回来",
+  "short_name": "向阳花圃",
+  "description": "向阳花圃：帮抑郁的人管理生活 —— 记录心情、按时吃药、专注做事，一天天把日子养回来。",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

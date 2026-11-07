@@ -227,7 +227,7 @@ async function main() {
           const t = [...document.querySelectorAll('.group-title')].find(x => x.textContent.includes('关怀'));
           return JSON.stringify({
             hasTitle: !!t,
-            entries: [...document.querySelectorAll('.care-med, .care-tile')].map(x => x.innerText.split('\\n')[0]),
+            entries: [...document.querySelectorAll('.med-card, .care-tile')].map(x => x.innerText.split('\\n')[0]),
           });
         })()`),
       ),
@@ -238,7 +238,7 @@ async function main() {
       ['吃药提醒', '快捷提醒', '学习模式'].every((n) => careBox.entries.some((e) => e.includes(n))),
       JSON.stringify(careBox.entries),
     );
-    await ev(`document.querySelector('.care-med')?.click()`);
+    await ev(`document.querySelector('.med-card')?.click()`);
     await sleep(2000);
     check('点「吃药提醒」能进页面', (await ev(`location.hash`)) === '#/meds');
     await shot('01-吃药提醒-空状态');

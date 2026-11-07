@@ -1425,6 +1425,21 @@ mark {
 }
 
 .gate-mark svg { width: 32px; height: 32px; }
+
+/*
+ * 品牌标现在是一张真实图标（向日葵）而不是内联 SVG。
+ * 必须给 img 自己定尺寸 —— 直接塞进去它会按图片原始像素铺开，
+ * 把标题盖住（这个坑刚踩过）。
+ */
+.gate-mark img,
+.brand-mark img,
+.boot-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  object-fit: cover;
+}
 .gate h1 { font-size: 1.5rem; margin-bottom: 6px; letter-spacing: -0.02em; }
 .gate .desc { color: var(--text-3); font-size: 0.88rem; margin-bottom: 24px; line-height: 1.7; }
 .gate .field { text-align: left; }

@@ -71,13 +71,16 @@ say "构建 Web 产物并同步到 Android 工程"
 # App 里的页面跑在 https://localhost，接口必须用绝对地址，
 # 所以打包 App 时把后端地址注入进去（网页版则保持同源相对路径）
 API_BASE="${VITE_API_BASE:-https://zhuangrongjian.space/shiguang}"
-VITE_OUT_DIR=dist-app VITE_API_BASE="$API_BASE" pnpm build
+# 用 npm 而不是 pnpm：项目搬过一次目录之后，pnpm 会因为 node_modules 里的
+# 软链指回旧路径而想整份重装；非交互环境下它会直接中止（ERR_PNPM_ABORTED_...），
+# 把打包卡死在第一步。npm 不检查这个，直接就跑。
+VITE_OUT_DIR=dist-app VITE_API_BASE="$API_BASE" npm run build
 if grep -q "zhuangrongjian.space" dist-app/assets/*.js 2>/dev/null; then
   ok "已注入后端地址 $API_BASE"
 else
   warn "没找到注入的后端地址，App 可能连不上服务器"
 fi
-pnpm exec cap sync android >/dev/null 2>&1
+npx --no-install cap sync android >/dev/null 2>&1
 ok "Web 产物已同步（离线可用）"
 
 # ---------- 3. 图标 ----------

@@ -75,14 +75,62 @@ export function addDays(ds, n) {
 // 吃药
 // ---------------------------------------------------------------
 
+/** "YYYY-MM-DD" 之间差几天（同一天为 0） */
+export function daysBetween(from, to) {
+  const a = atLocal(from, '12:00');
+  const b = atLocal(to, '12:00');
+  if (a == null || b == null) return NaN;
+  return Math.round((b - a) / 86400000);
+}
+
+/**
+ * 周期性服药：吃 onDays 天、停 offDays 天，循环。
+ *
+ * 这是很常见的一种开法 —— 比如「连吃 21 天，停 7 天，再吃 21 天」。
+ * 用 startDate 当作第 1 天来算相位：
+ *   第 1..21 天 吃，第 22..28 天 停，第 29 天又是新的第 1 天。
+ *
+ * 返回 null 表示没设周期（也就是天天吃）；否则返回
+ * { onDays, offDays, day, phase: 'on'|'off', cycleLen }
+ *   day: 当前是这一轮的第几天（1 开始），界面上要显示「第 3/21 天」
+ */
+export function cycleInfo(med, ds) {
+  const c = med && med.cycle;
+  if (!c) return null;
+  const onDays = Math.max(0, Math.min(365, Math.round(Number(c.onDays) || 0)));
+  const offDays = Math.max(0, Math.min(365, Math.round(Number(c.offDays) || 0)));
+  // 没有「吃」的天数就不成立；没有停的天数等于天天吃，按没周期处理
+  if (onDays <= 0 || offDays <= 0) return null;
+  const start = med.startDate;
+  if (!start) return null;
+
+  const diff = daysBetween(start, ds);
+  if (!Number.isFinite(diff) || diff < 0) return { onDays, offDays, day: 0, phase: 'off', cycleLen: onDays + offDays, before: true };
+  const cycleLen = onDays + offDays;
+  const phase = diff % cycleLen;
+  return {
+    onDays,
+    offDays,
+    cycleLen,
+    day: (phase % onDays) + 1,
+    phase: phase < onDays ? 'on' : 'off',
+    // 停的那几天里，是第几天（1..offDays）
+    offDay: phase < onDays ? 0 : phase - onDays + 1,
+  };
+}
+
 /**
  * 这种药在某一天要吃哪几次。
- * 三层过滤：药本身停用了、星期几不对、不在疗程区间内。
+ * 四层过滤：药本身停用了、周期落在停药期、星期几不对、不在疗程区间内。
  */
 export function medSlotsOn(med, ds) {
   if (!med || med.enabled === false) return [];
   if (med.startDate && ds < med.startDate) return [];
   if (med.endDate && ds > med.endDate) return [];
+
+  // 周期性服药：停的那几天一次都不吃
+  const c = cycleInfo(med, ds);
+  if (c && c.phase !== 'on') return [];
 
   const days = med.days;
   if (Array.isArray(days) && days.length && days.length < 7) {
@@ -142,6 +190,7 @@ export function todayPlan(meds, doseLog, ds, now = Date.now(), graceMin = 60) {
   const state = doseState(doseLog, ds);
   const plan = [];
   for (const med of meds || []) {
+    const c = cycleInfo(med, ds);
     for (const at of medSlotsOn(med, ds)) {
       const dueAt = atLocal(ds, at);
       const rec = state.get(doseKey(med.id, at));
@@ -155,6 +204,8 @@ export function todayPlan(meds, doseLog, ds, now = Date.now(), graceMin = 60) {
         dueAt,
         alarm: !!med.alarm,
         prn: !!med.prn,
+        keepReminding: med.keepReminding !== false,
+        cycle: c ? { onDays: c.onDays, offDays: c.offDays, day: c.day, cycleLen: c.cycleLen } : null,
         status: rec ? rec.action : 'pending',
         takenAt: rec && rec.action === 'taken' ? rec.at || rec.ts : null,
         overdue: !rec && dueAt != null && now > dueAt + graceMin * 60000,
@@ -397,7 +448,39 @@ export function buildSchedule(data, opts = {}) {
         body: `${item.name}${item.dose ? ` · ${item.dose}` : ''}`,
         date: ds,
         slot: item.at,
+        // 0 = 这一顿的准点提醒；1..5 = 没签到时补催的第几次
+        repeat: 0,
       });
+
+      /*
+       * 没签到就继续催。
+       *
+       * 这里提前把「重复提醒」也排进去，而不是靠通知那边自己重发 ——
+       * 客户端每次签完到都会重排整份时间表，所以一旦打卡，后面这些
+       * 重复条目自然就被取消了，不需要额外的同步机制。
+       *
+       * 间隔 30 分钟、最多补 5 次：够把「忘了吃」拽回来，
+       * 又不至于让药变成骚扰。用户可以在设置里关掉。
+       */
+      if (item.keepReminding) {
+        for (let k = 1; k <= 5; k++) {
+          const again = item.dueAt + k * 30 * 60000;
+          // 跨过午夜就不再补 —— 第二天还有第二天自己的安排
+          if (dateStr(new Date(again)) !== ds) break;
+          out.push({
+            kind: 'med',
+            id: `med:${item.medId}:${ds}:${item.at}:${k}`,
+            refId: item.medId,
+            at: again,
+            alarm: !!item.alarm,
+            title: `还没吃药 · ${item.name}`,
+            body: `${item.label ? `${item.label}的` : ''}${item.dose || '这一次'}还没打卡，吃了就点开记一下`,
+            date: ds,
+            slot: item.at,
+            repeat: k,
+          });
+        }
+      }
     }
   }
 

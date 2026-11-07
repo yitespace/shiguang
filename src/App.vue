@@ -33,6 +33,9 @@ import {
 
 const route = useRoute();
 
+/** 品牌图标：放在 public/ 下，用 BASE_URL 拼路径，换了部署目录也不会裂 */
+const logoSrc = `${import.meta.env.BASE_URL}icon-192.png`;
+
 // 弹层
 const recorderOpen = ref(false);
 const voiceOpen = ref(false);
@@ -43,7 +46,9 @@ const editingId = ref<string | null>(null);
 const NAV = [
   { to: '/', label: '过往', icon: 'book' },
   { to: '/find', label: '拾迹', icon: 'search' },
-  { to: '/stats', label: '统计', icon: 'chart' },
+  // 「统计」从底栏撤了 —— 它藏在「我的 → 我的记录 → 统计」里，够用；
+  // 底栏的位置留给「功能」，那里以后会长出各种单独的小工具。
+  { to: '/tools', label: '功能', icon: 'grid' },
   { to: '/mine', label: '我的', icon: 'user' },
 ];
 const TABS_LEFT = [NAV[0], NAV[1]];
@@ -176,8 +181,8 @@ async function retry() {
 <template>
   <!-- 启动中 -->
   <div v-if="!ready" class="boot">
-    <div class="boot-mark"><Icon name="feather" :size="30" /></div>
-    <p>拾光</p>
+    <div class="boot-mark"><img class="boot-logo" :src="logoSrc" alt="" /></div>
+    <p>向阳花圃</p>
   </div>
 
   <!--
@@ -189,7 +194,7 @@ async function retry() {
     <div class="nd-card">
       <span class="nd-icon"><Icon name="wifiOff" :size="26" /></span>
       <h1>连不上服务器</h1>
-      <p class="nd-msg">{{ netDownMsg || '网络不通，拾光打不开。' }}</p>
+      <p class="nd-msg">{{ netDownMsg || '网络不通，向阳花圃打不开。' }}</p>
       <ul class="nd-tips">
         <li>检查一下这台设备的网络，特别是代理 / VPN 有没有把它挡住</li>
         <li>浏览器里可以直接试这个地址：<code>./api/healthz</code></li>
@@ -210,9 +215,9 @@ async function retry() {
     <!-- ============ 桌面端左侧导航 ============ -->
     <aside class="side">
       <div class="side-brand">
-        <div class="brand-mark"><Icon name="feather" :size="17" /></div>
+        <div class="brand-mark"><img class="brand-logo" :src="logoSrc" alt="" /></div>
         <div>
-          <div class="side-name">拾光</div>
+          <div class="side-name">向阳花圃</div>
           <small>随手记录 · AI 回忆</small>
         </div>
       </div>
@@ -308,6 +313,15 @@ async function retry() {
 </template>
 
 <style scoped>
+/* 启动屏和侧栏的品牌标：一张图铺满原来的圆角方块 */
+.boot-logo {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
 /* ---------- 连不上服务器 ---------- */
 .netdown {
   min-height: 100dvh;
@@ -475,6 +489,14 @@ async function retry() {
     height: 100dvh;
     padding: 22px 0 26px;
   }
+}
+
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .side-brand {

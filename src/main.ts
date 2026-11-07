@@ -12,6 +12,7 @@ import ProfilePage from './pages/ProfilePage.vue';
 import MedsPage from './pages/MedsPage.vue';
 import RemindersPage from './pages/RemindersPage.vue';
 import FocusPage from './pages/FocusPage.vue';
+import ToolsPage from './pages/ToolsPage.vue';
 
 // 用 hash 路由：静态托管无需任何服务端重写规则，任何路径刷新都不会 404
 const router = createRouter({
@@ -33,6 +34,8 @@ const router = createRouter({
     { path: '/meds', name: 'meds', component: MedsPage },
     { path: '/reminders', name: 'reminders', component: RemindersPage },
     { path: '/focus', name: 'focus', component: FocusPage },
+    // 底栏「功能」：以后各种单独的小工具都挂在这一页下面
+    { path: '/tools', name: 'tools', component: ToolsPage },
     { path: '/stats', name: 'stats', component: StatsPage },
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/:pathMatch(.*)*', redirect: '/' },

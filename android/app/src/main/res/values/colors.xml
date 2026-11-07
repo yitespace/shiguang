@@ -5,4 +5,9 @@
     <color name="focus_text">#322C28</color>
     <color name="focus_text_dim">#7A6C5F</color>
     <color name="focus_accent">#6D5EFC</color>
+    <!-- 吃药闹钟：深底 + 暖色主按钮，半夜点亮时不刺眼 -->
+    <color name="alarm_bg">#1C1A22</color>
+    <color name="alarm_text">#FFFFFF</color>
+    <color name="alarm_dim">#B9B3C6</color>
+    <color name="alarm_accent">#F2A03D</color>
 </resources>

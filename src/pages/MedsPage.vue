@@ -49,6 +49,15 @@ function prettyAt(at: string) {
   return `${part} ${at}`;
 }
 
+/** 「· 第 3/21 天」；停药期显示「· 停药第 2 天」 */
+function cycleDayText(med: care.Med) {
+  const item = plan.value.find((x) => x.medId === med.id);
+  if (item?.cycle) return ` · 第 ${item.cycle.day}/${item.cycle.onDays} 天`;
+  // 今天没有这个药的条目，多半正处在停药期
+  if (med.cycle && med.startDate) return ' · 今天不用吃';
+  return '';
+}
+
 function slotText(med: care.Med) {
   return med.slots.map((s) => `${s.label || prettyAt(s.at)}${s.dose || med.dose ? ` ${s.dose || med.dose}` : ''}`).join(' · ');
 }
@@ -241,8 +250,14 @@ async function acceptAll() {
   for (let i = draft.value.length - 1; i >= 0; i--) await acceptDraft(i);
 }
 
+const cycleOn = ref<number | null>(null);
+const cycleOff = ref<number | null>(null);
+
 function openEdit(med: care.Med) {
   editing.value = JSON.parse(JSON.stringify(med));
+  // 周期在后端是一个对象，编辑面板里拆成两个数字更好填
+  cycleOn.value = med.cycle?.onDays ?? null;
+  cycleOff.value = med.cycle?.offDays ?? null;
   editOpen.value = true;
 }
 
@@ -251,6 +266,12 @@ async function saveEdit() {
   if (!m) return;
   busy.value = 'edit';
   try {
+    const on = Number(cycleOn.value) || 0;
+    const off = Number(cycleOff.value) || 0;
+    // 两边都填了才算周期；只填一边当作没设，避免存出个奇怪的半截状态
+    m.cycle = on > 0 && off > 0 ? { onDays: on, offDays: off } : null;
+    // 周期得有个起算日，否则算不出「现在是第几天」
+    if (m.cycle && !m.startDate) m.startDate = today.value;
     await care.saveMed(m);
     editOpen.value = false;
     toast('改好了');
@@ -408,6 +429,7 @@ onMounted(async () => {
           <span class="ml">
             <b>{{ med.name }}</b>
             <em>{{ slotText(med) }}</em>
+            <em v-if="med.cycle" class="hint">吃 {{ med.cycle.onDays }} 天 · 停 {{ med.cycle.offDays }} 天{{ cycleDayText(med) }}</em>
             <em v-if="med.endDate" class="hint">吃到 {{ med.endDate }}</em>
             <em v-else-if="med.prn" class="hint">需要时服用 · 不提醒</em>
           </span>
@@ -531,6 +553,28 @@ onMounted(async () => {
               <input v-model="editing.note" type="text" maxlength="200" placeholder="饭后吃 / 忌酒" />
             </label>
 
+            <!--
+              周期性服药：吃 N 天、停 M 天。
+              这不是冷门需求 —— 「连吃 21 天停 7 天」是很标准的开法，
+              只支持「天天吃」等于让用户在停药期被反复提醒去吃药。
+            -->
+            <div class="field">
+              <span>是不是周期性吃？</span>
+              <p class="field-hint">比如「连吃 21 天，停 7 天，再吃 21 天」。天天吃就留空。</p>
+              <div class="cycle-row">
+                <label class="cycle-cell">
+                  <em>吃</em>
+                  <input v-model.number="cycleOn" type="number" min="0" max="365" inputmode="numeric" placeholder="—" />
+                  <em>天</em>
+                </label>
+                <label class="cycle-cell">
+                  <em>停</em>
+                  <input v-model.number="cycleOff" type="number" min="0" max="365" inputmode="numeric" placeholder="—" />
+                  <em>天</em>
+                </label>
+              </div>
+            </div>
+
             <label class="field row">
               <span>吃到哪天为止</span>
               <input v-model="editing.endDate" type="date" />
@@ -549,6 +593,13 @@ onMounted(async () => {
                 <span>
                   <b>需要时服用</b>
                   <em>只在清单里留着，不设定时提醒。医嘱写「必要时服用」的勾这个。</em>
+                </span>
+              </label>
+              <label class="switch">
+                <input v-model="editing.keepReminding" type="checkbox" />
+                <span>
+                  <b>没签到就继续提醒</b>
+                  <em>到点没打卡的话，每 30 分钟再提醒一次（最多 5 次）。关掉就只在准点响一次。</em>
                 </span>
               </label>
             </div>
@@ -1077,6 +1128,50 @@ onMounted(async () => {
 }
 
 /* ---------- 编辑 ---------- */
+.field-hint {
+  margin: 0 0 7px;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+.cycle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.cycle-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 11px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.cycle-cell em {
+  font-style: normal;
+  font-size: 0.82rem;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.cycle-cell input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.92rem;
+  color: var(--text);
+  text-align: center;
+}
+
+.cycle-cell input:focus {
+  outline: none;
+}
 .field {
   display: block;
   margin-bottom: 12px;

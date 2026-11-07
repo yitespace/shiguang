@@ -107,6 +107,41 @@ public class ShiguangNotifyPlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * 用户在原生全屏页点了「吃了」。
+     * 这里把那条记录取出来交给网页层去真正打卡（原生拿不到登录态）。
+     * 格式：medId|date|slot|ts
+     */
+    @PluginMethod
+    public void pendingTake(PluginCall call) {
+        JSObject ret = new JSObject();
+        android.content.SharedPreferences p =
+                getContext().getSharedPreferences("shiguang_pending", android.content.Context.MODE_PRIVATE);
+        String raw = p.getString("pendingTake", "");
+        if (raw == null || raw.isEmpty()) {
+            ret.put("take", null);
+            call.resolve(ret);
+            return;
+        }
+        String[] parts = raw.split("\\|");
+        if (parts.length >= 3) {
+            ret.put("medId", parts[0]);
+            ret.put("date", parts[1]);
+            ret.put("slot", parts[2]);
+        } else {
+            ret.put("take", null);
+        }
+        call.resolve(ret);
+    }
+
+    /** 取走之后清掉，避免重复打卡 */
+    @PluginMethod
+    public void clearPendingTake(PluginCall call) {
+        getContext().getSharedPreferences("shiguang_pending", android.content.Context.MODE_PRIVATE)
+                .edit().remove("pendingTake").apply();
+        call.resolve();
+    }
+
     /** 调试用：看看现在存了哪些排程 */
     @PluginMethod
     public void list(PluginCall call) {

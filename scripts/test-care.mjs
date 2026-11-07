@@ -25,6 +25,8 @@ import {
   medSlotsOn,
   slotLabel,
   slotDose,
+  cycleInfo,
+  daysBetween,
   doseKey,
   doseState,
   todayPlan,
@@ -144,6 +146,29 @@ check(
   medSlotsOn({ ...medA, slots: [{ at: '08:00' }, { at: '08:00' }, '08:00'] }, '2026-10-14').join(',') === '08:00',
 );
 check('没写时间点的药一次都不出', medSlotsOn({ ...medA, slots: [] }, '2026-10-14').length === 0);
+
+/*
+ * 周期性服药：连吃 21 天、停 7 天，再吃 21 天。
+ * 这是很多药的标准开法，不能只支持「天天吃」。
+ * 从 2026-10-01 算第 1 天：10/01–10/21 吃，10/22–10/28 停，10/29 重新开始。
+ */
+const cyc = { ...medA, id: 'cyc', startDate: '2026-10-01', cycle: { onDays: 21, offDays: 7 } };
+check('周期药：第 1 天要吃', medSlotsOn(cyc, '2026-10-01').length === 2);
+check('周期药：第 21 天还在吃', medSlotsOn(cyc, '2026-10-21').length === 2);
+check('周期药：第 22 天开始停', medSlotsOn(cyc, '2026-10-22').length === 0);
+check('周期药：停的第 7 天也不吃', medSlotsOn(cyc, '2026-10-28').length === 0);
+check('周期药：第 29 天重新开始', medSlotsOn(cyc, '2026-10-29').length === 2);
+check('周期药：第二个周期第 21 天照常吃', medSlotsOn(cyc, '2026-11-18').length === 2);
+check('周期药：第二个周期结束后同样要停', medSlotsOn(cyc, '2026-11-19').length === 0);
+const ci = cycleInfo(cyc, '2026-10-03');
+check('周期信息：第 3/21 天', ci?.day === 3 && ci?.onDays === 21 && ci?.phase === 'on', JSON.stringify(ci));
+const ciOff = cycleInfo(cyc, '2026-10-24');
+check('周期信息：停药期第 3 天', ciOff?.phase === 'off' && ciOff?.offDay === 3, JSON.stringify(ciOff));
+check('开始日之前一律不吃', medSlotsOn(cyc, '2026-09-30').length === 0);
+check('停的天数为 0 就当天天吃', medSlotsOn({ ...cyc, cycle: { onDays: 21, offDays: 0 } }, '2026-10-25').length === 2);
+check('daysBetween 算得对', daysBetween('2026-10-01', '2026-10-29') === 28);
+check('计划里带上周期天数（界面要显示第几天）', todayPlan([cyc], [], '2026-10-03', ts(2026, 10, 3, 6, 0))[0].cycle?.day === 3);
+check('停药期整个计划为空', todayPlan([cyc], [], '2026-10-24', ts(2026, 10, 24, 6, 0)).length === 0);
 
 // ---- 打卡状态 ----
 const day = '2026-10-14';
@@ -326,11 +351,25 @@ const sched = buildSchedule(
 
 check('时间表里排进了今天晚上那次药', sched.some((x) => x.kind === 'med' && x.at === ts(2026, 10, 14, 20, 0)));
 check('已经吃过的那次不再排', !sched.some((x) => x.kind === 'med' && x.date === '2026-10-14' && x.slot === '08:00'));
-check('排进了明天的两次药', sched.filter((x) => x.kind === 'med' && x.date === '2026-10-15').length === 2);
+// 只数「准点」那条；repeat>0 是没签到时补催的，单独测
+const primary = (list) => list.filter((x) => x.kind === 'med' && x.repeat === 0);
+check('排进了明天的两次药', primary(sched).filter((x) => x.date === '2026-10-15').length === 2, `实际 ${primary(sched).filter((x) => x.date === '2026-10-15').length}`);
 check('提前量算进提醒时间', sched.some((x) => x.kind === 'reminder' && x.refId === 'r1' && x.at === ts(2026, 10, 14, 21, 50)));
 check('过去的提醒不排', !sched.some((x) => x.refId === 'r2'));
 check('已完成的提醒不排', !sched.some((x) => x.refId === 'r3'));
 check('整张表按时间排序', sched.every((x, i) => i === 0 || sched[i - 1].at <= x.at));
+
+/*
+ * 没签到就继续催：到点之后每 30 分钟补一次，最多 5 次。
+ * 关掉这个开关的药就不该有补催条目。
+ */
+const repeats = sched.filter((x) => x.kind === 'med' && x.repeat > 0 && x.date === '2026-10-14' && x.slot === '20:00');
+check('没签到时每 30 分钟补催一次', repeats.length === 5, `实际 ${repeats.length}`);
+check('补催是 30 分钟一档', repeats.every((x, i) => x.at === ts(2026, 10, 14, 20, 0) + (i + 1) * 30 * 60000));
+const schedNoRepeat = buildSchedule({ meds: [{ ...medA, keepReminding: false }], doses: log, reminders: [] }, { days: 1, now: schedNow });
+check('关掉「未签到继续提醒」就没有补催', schedNoRepeat.filter((x) => x.repeat > 0).length === 0, `实际 ${schedNoRepeat.filter((x) => x.repeat > 0).length}`);
+const lateNight = buildSchedule({ meds: [{ ...medA, slots: [{ at: '23:30' }] }], doses: [], reminders: [] }, { days: 1, now: ts(2026, 10, 14, 12, 0) });
+check('补催不跨天（23:30 那顿只补到当天）', lateNight.filter((x) => x.slot === '23:30' && x.repeat > 0).every((x) => x.date === '2026-10-14'));
 check('药的 id 带上日期，同一种药不同天不会撞', new Set(sched.filter((x) => x.kind === 'med').map((x) => x.id)).size === sched.filter((x) => x.kind === 'med').length);
 /*
  * 按需服用的药绝不能进时间表。

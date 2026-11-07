@@ -40,6 +40,8 @@ const meta = ref<AiMeta | null>(null);
 const errorMsg = ref('');
 const showAllCited = ref(false);
 let abort: (() => void) | null = null;
+/** 「点了没反应」看门狗，见 ask() */
+let watchdog: number | undefined;
 
 const recent = ref<string[]>([]);
 
@@ -117,6 +119,20 @@ async function ask(question?: string) {  const text = (question ?? q.value).trim
   hits.value = [];
   await scrollDown();
 
+  /*
+   * 看门狗。
+   * 点完按钮最怕的是「什么都没发生」—— 用户分不清是没点上、还是网卡了。
+   * 15 秒内既没有正文也没有报错，就明确说一句，并给一个重试入口。
+   */
+  window.clearTimeout(watchdog);
+  watchdog = window.setTimeout(() => {
+    if (asking.value && !answer.value && !errorMsg.value) {
+      errorMsg.value = 'AI 一直没有回应。可能是网络不通，也可能是服务端在忙。';
+      asking.value = false;
+      abort = null;
+    }
+  }, 15000);
+
   const history: { role: string; content: string }[] = [];
 
   await new Promise<void>((resolve) => {
@@ -126,6 +142,7 @@ async function ask(question?: string) {  const text = (question ?? q.value).trim
         scrollDown(false);
       },
       onDone: (payload) => {
+        window.clearTimeout(watchdog);
         answer.value = payload.answer || answer.value;
         refs.value = payload.refs || [];
         cited.value = payload.entries?.length ? payload.entries : citedFromRefs(refs.value);
@@ -135,6 +152,7 @@ async function ask(question?: string) {  const text = (question ?? q.value).trim
         resolve();
       },
       onError: (msg) => {
+        window.clearTimeout(watchdog);
         errorMsg.value = msg;
         asking.value = false;
         abort = null;
@@ -146,6 +164,7 @@ async function ask(question?: string) {  const text = (question ?? q.value).trim
 }
 
 function stopAsk() {
+  window.clearTimeout(watchdog);
   abort?.();
   abort = null;
   asking.value = false;
